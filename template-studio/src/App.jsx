@@ -8,11 +8,13 @@ import VariableForm from './components/VariableForm.jsx';
 import OutputPanel from './components/OutputPanel.jsx';
 import DbStudio from './db/DbStudio.jsx';
 import ExcelStudio from './excel/ExcelStudio.jsx';
+import JavaStudio from './java/JavaStudio.jsx';
 
 const viewFromHash = () => {
   const hash = window.location.hash.replace(/^#\/?/, '');
   if (hash === 'db') return 'db';
   if (hash === 'excel' || hash === 'mapping') return 'excel';
+  if (hash === 'java' || hash === 'code') return 'java';
   return 'template';
 };
 
@@ -64,7 +66,9 @@ export default function App() {
   }, []);
 
   const go = useCallback((next) => {
-    window.location.hash = next === 'db' ? '#db' : next === 'excel' ? '#excel' : '#template';
+    window.location.hash = next === 'db' ? '#db'
+      : next === 'excel' ? '#excel'
+        : next === 'java' ? '#java' : '#template';
     setView(next);
   }, []);
 
@@ -279,6 +283,11 @@ export default function App() {
             className={`nav-item ${view === 'excel' ? 'active' : ''}`}
             onClick={() => go('excel')}
           >Excel 取込 / INSERT 生成</button>
+          <button
+            type="button"
+            className={`nav-item ${view === 'java' ? 'active' : ''}`}
+            onClick={() => go('java')}
+          >Java 代码索引 / 检索</button>
         </nav>
 
         {view === 'template' ? <div className="topbar-actions">
@@ -312,14 +321,17 @@ export default function App() {
           <span className="nav-context">
             {view === 'db'
               ? 'DB 接続 → メタデータ JSON → 結合 / UPDATE / DELETE SQL'
-              : 'Excel 取込 → 列マッピング JSON → INSERT SQL（1 テーブル = 1 JSON）'}
+              : view === 'excel'
+                ? 'Excel 取込 → 列マッピング JSON → INSERT SQL（1 テーブル = 1 JSON）'
+                : 'JAR / 全ファイル → SQLite + FTS5 索引 → 9 項目検索（増分スキャン · 多階層 Group · 包名/后缀/大小写/数据源过滤）'}
           </span>
         </div>}
       </header>
 
       {view === 'db' ? <DbStudio onStatus={setStatus} />
         : view === 'excel' ? <ExcelStudio onStatus={setStatus} />
-          : <main className="workspace">
+          : view === 'java' ? <JavaStudio onStatus={setStatus} />
+            : <main className="workspace">
         <TemplateEditor template={template} onChange={setTemplate} extraction={extraction} />
         <VariableForm
           variables={extraction.variables}

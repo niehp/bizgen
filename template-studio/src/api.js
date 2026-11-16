@@ -94,3 +94,57 @@ export const deleteMapping = (id) =>
 
 export const buildInsertSqlApi = (payload) =>
   request('/mapping/insert', { method: 'POST', body: JSON.stringify(payload) });
+
+/* ---------------- Java 代码索引 / 全文检索 ---------------- */
+export const listJavaSources = () => request('/java/sources');
+
+export const listJavaFiles = (sourceId) =>
+  request(`/java/files?sourceId=${encodeURIComponent(sourceId)}`);
+
+export const deleteJavaSource = (id) =>
+  request(`/java/sources/${encodeURIComponent(id)}`, { method: 'DELETE' });
+
+export const scanJavaFolder = (name, files, group = '') =>
+  request('/java/scan/folder', {
+    method: 'POST',
+    body: JSON.stringify({ name, files, group }),
+  });
+
+export const scanJavaJar = (name, base64, group = '') =>
+  request('/java/scan/jar', {
+    method: 'POST',
+    body: JSON.stringify({ name, base64, group }),
+  });
+
+export const scanJavaPath = (dirPath, name = '', group = '') =>
+  request('/java/scan/path', {
+    method: 'POST',
+    body: JSON.stringify({ path: dirPath, name, group }),
+  });
+
+export const setJavaSourceGroup = (id, group) =>
+  request(`/java/sources/${encodeURIComponent(id)}/group`, {
+    method: 'PUT',
+    body: JSON.stringify({ group }),
+  });
+
+export const setJavaSourceName = (id, name) =>
+  request(`/java/sources/${encodeURIComponent(id)}/name`, {
+    method: 'PUT',
+    body: JSON.stringify({ name }),
+  });
+
+export const renameJavaGroup = (from, to) =>
+  request('/java/groups/rename', {
+    method: 'PUT',
+    body: JSON.stringify({ from, to }),
+  });
+
+export const getJavaFileContent = (fileId) =>
+  request(`/java/files/${encodeURIComponent(fileId)}/content`);
+
+export const searchJava = (payload) =>
+  request('/java/search', { method: 'POST', body: JSON.stringify(payload) });
+
+export const getJavaEntry = (id, context = 6, query = '', caseSensitive = false) =>
+  request(`/java/entries/${encodeURIComponent(id)}?context=${context}&q=${encodeURIComponent(query)}&cs=${caseSensitive ? '1' : '0'}`);

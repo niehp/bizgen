@@ -11,6 +11,7 @@ import { APP_DB_DIALECT } from '../shared/dbmeta.js';
 import { buildInsertSql } from '../shared/mapping.js';
 import * as dbmeta from './dbmeta.js';
 import * as mappings from './mapping.js';
+import * as javaIndex from './java-store.js';
 import {
   listTemplates,
   getTemplate,
@@ -227,6 +228,58 @@ app.post('/api/mapping/insert', wrap((req) => ({
     options: req.body?.options,
   }),
 })));
+
+/* ---------------- Java 代码索引 / 全文检索 ---------------- */
+app.get('/api/java/sources', wrap(() => ({
+  sources: javaIndex.listSources(),
+  stats: javaIndex.stats(),
+  roots: javaIndex.listRoots(),
+  groups: javaIndex.listGroups(),
+})));
+
+app.get('/api/java/files', wrap((req) => ({
+  files: javaIndex.sourceFiles(String(req.query.sourceId || '')),
+})));
+
+app.get('/api/java/files/:fileId/content', wrap((req) => javaIndex.getFileContent(req.params.fileId)));
+
+app.put('/api/java/sources/:id/group', wrap((req) => ({
+  updated: javaIndex.setSourceGroup(req.params.id, req.body?.group),
+})));
+
+app.put('/api/java/sources/:id/name', wrap((req) => ({
+  updated: javaIndex.setSourceName(req.params.id, req.body?.name),
+})));
+
+app.put('/api/java/groups/rename', wrap((req) => ({
+  updated: javaIndex.renameGroup(req.body?.from, req.body?.to),
+})));
+
+app.delete('/api/java/sources/:id', wrap((req) => ({
+  deleted: javaIndex.deleteSource(req.params.id),
+})));
+
+// webkitdirectory 读取的源码文本：{ name, files:[{path, content}] }
+app.post('/api/java/scan/folder', wrap((req) => javaIndex.scanFolder(
+  req.body?.name, req.body?.files, req.body?.note, req.body?.group,
+)));
+
+// JAR / ZIP / sources.jar：浏览器读取为 base64 后提交
+app.post('/api/java/scan/jar', wrap((req) => javaIndex.scanJar(
+  req.body?.name, req.body?.base64, req.body?.note, req.body?.group,
+)));
+
+// 服务器本地目录：Web 端填写绝对路径；首次全量，之后由每次检索触发增量扫描
+app.post('/api/java/scan/path', wrap((req) => javaIndex.scanPath(
+  req.body?.path, req.body?.name, req.body?.note, req.body?.group,
+)));
+
+app.post('/api/java/search', wrap((req) => javaIndex.search(req.body || {})));
+
+app.get('/api/java/entries/:id', wrap((req) => javaIndex.getEntry(
+  req.params.id, Number(req.query.context || 6), String(req.query.q || ''),
+  req.query.cs === '1' || req.query.cs === 'true',
+)));
 
 const dist = path.join(__dirname, '..', 'dist');
 if (fs.existsSync(dist)) {
