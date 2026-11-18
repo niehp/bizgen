@@ -8,6 +8,8 @@ import { placeholder, newCondition, camelCase, literalFlags } from '../../shared
 const OPTION_LIMIT = 200;
 // SET 値の入力欄も列数無制限のため、先頭から段階的に描画する（全件を一度に DOM に出さない）
 const SET_PAGE_SIZE = 100;
+// WHERE 条件も列数無制限（全選択で数万行になり得る）ため、描画だけ段階的に行う
+const COND_PAGE_SIZE = 100;
 
 function optionSubset(options, query, selected) {
   const q = String(query || '').trim().toLowerCase();
@@ -25,10 +27,37 @@ function optionSubset(options, query, selected) {
   };
 }
 
-function ConditionEditor({ conditions, onChange, columnOptions, style, typeOf }) {
+/**
+ * WHERE 条件エディタ。
+ * ・一括「全選択 / 全解除」は表示用の 200 件ではなく、対象の全列に適用する（列数無制限）。
+ * ・条件行自体も全件を DOM に出さず、検索 + 段階表示で数万条件でも操作できる。
+ */
+function ConditionEditor({ conditions, onChange, columnOptions, bulkColumnOptions = [], style, typeOf }) {
+  const [query, setQuery] = useState('');
+  const [limit, setLimit] = useState(COND_PAGE_SIZE);
   const patch = (i, key, value) => onChange(conditions.map((c, n) => (n === i ? { ...c, [key]: value } : c)));
   const needsValue = (op) => (CONDITION_OPS.find((o) => o.id === op) || {}).needsValue !== false;
   const flagsOf = (ref) => literalFlags(typeOf(ref));
+
+  const labelOf = useMemo(() => {
+    const map = new Map((bulkColumnOptions || []).map((o) => [o.value, o.label]));
+    return (v) => map.get(v) || String(v || '');
+  }, [bulkColumnOptions]);
+
+  const q = String(query || '').trim().toLowerCase();
+  const indexed = conditions.map((c, i) => ({ c, i }));
+  const matched = q
+    ? indexed.filter(({ c }) => `${c.column} ${labelOf(c.column)}`.toLowerCase().includes(q))
+    : indexed;
+  const shown = matched.slice(0, limit);
+
+  useEffect(() => { setLimit(COND_PAGE_SIZE); }, [query]);
+
+  const selectAll = () => onChange((bulkColumnOptions || []).map((o) => newCondition(o.value, '=')));
+  const addCondition = () => {
+    onChange([...conditions, newCondition(bulkColumnOptions[0]?.value || '', '=')]);
+    setLimit((n) => Math.max(n, conditions.length + 1));
+  };
 
   return (
     <div className="db-cond-box">
@@ -37,72 +66,97 @@ function ConditionEditor({ conditions, onChange, columnOptions, style, typeOf })
         <span className="db-section-sub">条件列の一括設定</span>
         <button
           type="button" className="link-btn"
-          disabled={!columnOptions.length}
-          onClick={() => onChange(columnOptions.map((o) => newCondition(o.value, '=')))}
+          disabled={!bulkColumnOptions.length}
+          onClick={selectAll}
         >条件を全選択</button>
         <button
           type="button" className="link-btn"
           disabled={!conditions.length}
           onClick={() => onChange([])}
         >条件を全解除</button>
-        <span className="db-filter-count">{conditions.length} / {columnOptions.length} 条件</span>
+        <span className="db-filter-count">{conditions.length} / {bulkColumnOptions.length} 条件</span>
       </div>
-      {conditions.length === 0 && <div className="db-empty">条件列を選ぶか「条件を追加」してください</div>}
-      {conditions.map((c, i) => (
-        <div className="cond-row" key={`${c.column}-${i}`}>
-          {i > 0 ? (
-            <select
-              className="control cond-conj"
-              value={c.conjunction || 'AND'}
-              onChange={(e) => patch(i, 'conjunction', e.target.value)}
-            >
-              <option value="AND">AND</option>
-              <option value="OR">OR</option>
-            </select>
-          ) : <span className="cond-conj cond-conj-blank" />}
-          <select
-            className="control cond-col"
-            value={c.column}
-            onChange={(e) => patch(i, 'column', e.target.value)}
-          >
-            <option value="">（列を選択）</option>
-            {columnOptions.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}{o.comment ? ` — ${o.comment}` : ''}</option>
-            ))}
-          </select>
-          <select
-            className="control cond-op"
-            value={c.op}
-            onChange={(e) => patch(i, 'op', e.target.value)}
-          >
-            {CONDITION_OPS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
-          </select>
-          {needsValue(c.op) && (
-            <input
-              className="control cond-val"
-              value={c.value ?? ''}
-              placeholder={placeholder(c.column, style, flagsOf(c.column))}
-              onChange={(e) => patch(i, 'value', e.target.value)}
-            />
-          )}
-          {c.op === 'BETWEEN' && (
-            <input
-              className="control cond-val"
-              value={c.value2 ?? ''}
-              placeholder={placeholder(`${c.column}_to`, style, flagsOf(c.column))}
-              onChange={(e) => patch(i, 'value2', e.target.value)}
-            />
-          )}
-          <button
-            type="button" className="tbl-del" title="条件を削除"
-            onClick={() => onChange(conditions.filter((_, n) => n !== i))}
-          >×</button>
+      {conditions.length > COND_PAGE_SIZE && (
+        <div className="db-filter-row">
+          <input
+            className="control db-filter-input"
+            value={query}
+            placeholder="条件列で絞り込み（表示のみ・全条件が SQL 対象）"
+            aria-label="条件列の絞り込み"
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          {query && <button type="button" className="link-btn" onClick={() => setQuery('')}>クリア</button>}
+          <span className="db-filter-count">{shown.length} / {matched.length} 行を表示</span>
         </div>
-      ))}
-      <button
-        type="button" className="link-btn"
-        onClick={() => onChange([...conditions, newCondition(columnOptions[0]?.value || '', '=')])}
-      >＋ 条件を追加</button>
+      )}
+      {conditions.length === 0 && <div className="db-empty">条件列を選ぶか「条件を追加」してください</div>}
+      {shown.map(({ c, i }) => {
+        // 表示用の先頭 200 件に無い列も、選択中の値だけは確実に select に残す
+        const rowOptions = columnOptions.some((o) => o.value === c.column)
+          ? columnOptions
+          : [{ value: c.column, label: labelOf(c.column) }, ...columnOptions];
+        return (
+          <div className="cond-row" key={`${c.column}-${i}`}>
+            {i > 0 ? (
+              <select
+                className="control cond-conj"
+                value={c.conjunction || 'AND'}
+                onChange={(e) => patch(i, 'conjunction', e.target.value)}
+              >
+                <option value="AND">AND</option>
+                <option value="OR">OR</option>
+              </select>
+            ) : <span className="cond-conj cond-conj-blank" />}
+            <select
+              className="control cond-col"
+              value={c.column}
+              onChange={(e) => patch(i, 'column', e.target.value)}
+            >
+              <option value="">（列を選択）</option>
+              {rowOptions.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}{o.comment ? ` — ${o.comment}` : ''}</option>
+              ))}
+            </select>
+            <select
+              className="control cond-op"
+              value={c.op}
+              onChange={(e) => patch(i, 'op', e.target.value)}
+            >
+              {CONDITION_OPS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+            </select>
+            {needsValue(c.op) && (
+              <input
+                className="control cond-val"
+                value={c.value ?? ''}
+                placeholder={placeholder(c.column, style, flagsOf(c.column))}
+                onChange={(e) => patch(i, 'value', e.target.value)}
+              />
+            )}
+            {c.op === 'BETWEEN' && (
+              <input
+                className="control cond-val"
+                value={c.value2 ?? ''}
+                placeholder={placeholder(`${c.column}_to`, style, flagsOf(c.column))}
+                onChange={(e) => patch(i, 'value2', e.target.value)}
+              />
+            )}
+            <button
+              type="button" className="tbl-del" title="条件を削除"
+              onClick={() => onChange(conditions.filter((_, n) => n !== i))}
+            >×</button>
+          </div>
+        );
+      })}
+      {shown.length < matched.length && (
+        <div className="db-list-more">
+          <span>{shown.length} / {matched.length} 件を表示（条件は全 {conditions.length} 件が SQL 対象・上限なし）</span>
+          <button type="button" className="link-btn" onClick={() => setLimit((n) => n + COND_PAGE_SIZE)}>
+            さらに {COND_PAGE_SIZE} 件を表示
+          </button>
+          <button type="button" className="link-btn" onClick={() => setLimit(matched.length)}>全件を表示</button>
+        </div>
+      )}
+      <button type="button" className="link-btn" onClick={addCondition}>＋ 条件を追加</button>
     </div>
   );
 }
@@ -359,6 +413,8 @@ export default function SqlConfig({
           conditions={conditions}
           onChange={onConditions}
           columnOptions={scoped.list}
+          // 一括選択は表示用の 200 件ではなく、現在の SQL 種別で使える全列を渡す
+          bulkColumnOptions={columnOptions}
           style={options.placeholderStyle}
           typeOf={typeOf}
         />

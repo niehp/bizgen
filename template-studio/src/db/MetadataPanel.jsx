@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { findTable, dialectInfo, filterTables, filterColumns } from '../../shared/dbmeta.js';
+import { findTable, dialectInfo, filterTables } from '../../shared/dbmeta.js';
 
 // 列数・テーブル数は無制限。DOM だけを分割して描画し、スクロールで全件に到達できるようにする。
 const PAGE_SIZE = 300;
@@ -12,26 +12,28 @@ const MODE_HINT = {
 
 export default function MetadataPanel({
   metadata, activeTableId, onActiveTable, sqlKind,
-  joinTableIds, onToggleJoinTable, targetTableId, onSelectTarget,
+  joinTableIds, onToggleJoinTable, onClearSelectedTables,
+  targetTableId, onSelectTarget,
   isSelectChecked, onToggleSelectColumn,
   isSetChecked, onToggleSetColumn, onSetAllColumns,
   isWhereChecked, onToggleWhereColumn,
+  onSetAllSelectColumns, onSetAllWhereColumns,
   plan,
 }) {
   const [tableFilter, setTableFilter] = useState('');
-  const [columnFilter, setColumnFilter] = useState('');
   const [tableLimit, setTableLimit] = useState(PAGE_SIZE);
   const [columnLimit, setColumnLimit] = useState(PAGE_SIZE);
   const tables = metadata?.tables || [];
   const active = findTable(metadata, activeTableId) || tables[0] || null;
   const visibleTables = filterTables(tables, tableFilter);
-  const visibleColumns = filterColumns(active?.columns || [], columnFilter);
+  // 列一覧は絞り込みなし（全列を表示）。列数無制限のため DOM だけ段階描画する。
+  const visibleColumns = active?.columns || [];
   const shownTables = visibleTables.slice(0, tableLimit);
   const shownColumns = visibleColumns.slice(0, columnLimit);
 
   // メタデータ / 絞り込み / 選択テーブルが変わったら先頭から表示し直す（選択状態は保持）
   useEffect(() => { setTableLimit(PAGE_SIZE); }, [metadata, tableFilter]);
-  useEffect(() => { setColumnLimit(PAGE_SIZE); }, [active?.id, columnFilter]);
+  useEffect(() => { setColumnLimit(PAGE_SIZE); }, [active?.id]);
 
   const onListScroll = (setter, total) => (e) => {
     const el = e.currentTarget;
@@ -50,6 +52,7 @@ export default function MetadataPanel({
   const isTarget = Boolean(active && active.id === targetTableId);
   const canWhere = sqlKind === 'join' ? Boolean(alias) : isTarget;
   const info = dialectInfo(metadata?.dialect);
+  const selectedCount = sqlKind === 'join' ? joinTableIds.length : (targetTableId ? 1 : 0);
 
   const whereRef = (col) => (sqlKind === 'join' && alias ? `${alias}.${col}` : col);
 
@@ -95,9 +98,17 @@ export default function MetadataPanel({
                 aria-label="テーブル名の絞り込み"
                 onChange={(e) => setTableFilter(e.target.value)}
               />
-              {tableFilter && (
-                <button type="button" className="link-btn" onClick={() => setTableFilter('')}>クリア</button>
-              )}
+              <button
+                type="button" className="link-btn"
+                disabled={!tableFilter}
+                onClick={() => setTableFilter('')}
+              >絞り込みクリア</button>
+              <button
+                type="button" className="link-btn link-btn-danger"
+                disabled={!selectedCount}
+                title="選択中の表をすべて解除します（テーブル名の絞り込みには影響しません）"
+                onClick={onClearSelectedTables}
+              >選択中テーブルをクリア</button>
               <span className="db-filter-count">{visibleTables.length} / {tables.length}</span>
             </div>
             <div className="db-list" onScroll={onListScroll(setTableLimit, visibleTables.length)}>
@@ -141,36 +152,51 @@ export default function MetadataPanel({
               {alias && <span className="db-section-sub">別名 {alias}</span>}
             </div>
             {active?.comment && <div className="db-table-comment">表コメント: {active.comment}</div>}
-            <div className="db-filter-row">
-              <input
-                className="control db-filter-input"
-                value={columnFilter}
-                placeholder="列名 / 型 / 列コメントで絞り込み"
-                aria-label="列名の絞り込み"
-                onChange={(e) => setColumnFilter(e.target.value)}
-              />
-              {columnFilter && (
-                <button type="button" className="link-btn" onClick={() => setColumnFilter('')}>クリア</button>
+            <div className="db-filter-row db-bulk-row">
+              <span className="db-filter-count">{visibleColumns.length} 列</span>
+              {sqlKind === 'join' && (
+                <>
+                  <span className="db-section-sub">SELECT</span>
+                  <button
+                    type="button" className="link-btn"
+                    disabled={!active || !joinTableIds.includes(active.id)}
+                    onClick={() => onSetAllSelectColumns(true)}
+                  >全選択</button>
+                  <button
+                    type="button" className="link-btn"
+                    disabled={!active || !joinTableIds.includes(active.id)}
+                    onClick={() => onSetAllSelectColumns(false)}
+                  >全解除</button>
+                </>
               )}
-              <span className="db-filter-count">{visibleColumns.length} / {active?.columns.length || 0}</span>
-              <span className="db-filter-note">表示のみ（列数無制限・選択状態は保持）</span>
+              {sqlKind === 'update' && (
+                <>
+                  <span className="db-section-sub">SET（全列が既定）</span>
+                  <button
+                    type="button" className="link-btn"
+                    disabled={!isTarget}
+                    onClick={() => onSetAllColumns(true)}
+                  >全選択</button>
+                  <button
+                    type="button" className="link-btn"
+                    disabled={!isTarget}
+                    onClick={() => onSetAllColumns(false)}
+                  >全解除</button>
+                </>
+              )}
+              <span className="db-section-sub">条件</span>
+              <button
+                type="button" className="link-btn"
+                disabled={!canWhere}
+                onClick={() => onSetAllWhereColumns(true)}
+              >全選択</button>
+              <button
+                type="button" className="link-btn"
+                disabled={!canWhere}
+                onClick={() => onSetAllWhereColumns(false)}
+              >全解除</button>
+              <span className="db-filter-note">この表の全列に適用（列数無制限）</span>
             </div>
-            {sqlKind === 'update' && (
-              <div className="db-filter-row">
-                <span className="db-section-sub">SET は表の全列（主キー・監査列を含む）が既定</span>
-                <button
-                  type="button" className="link-btn"
-                  disabled={!isTarget}
-                  onClick={() => onSetAllColumns(true)}
-                >全列を選択</button>
-                <button
-                  type="button" className="link-btn"
-                  disabled={!isTarget}
-                  onClick={() => onSetAllColumns(false)}
-                >全列を解除</button>
-                <span className="db-filter-note">絞り込みは表示のみ・一括操作は表の全列に適用</span>
-              </div>
-            )}
             <div className="db-col-head">
               <span className="db-col-checks">
                 {sqlKind === 'join' && <span>SELECT</span>}
@@ -225,7 +251,7 @@ export default function MetadataPanel({
               })}
               {!active && <div className="db-empty">テーブルを選択してください</div>}
               {active && visibleColumns.length === 0 && (
-                <div className="db-empty">条件に一致する列がありません</div>
+                <div className="db-empty">この表には列がありません</div>
               )}
             </div>
             {moreHint(shownColumns.length, visibleColumns.length, setColumnLimit)}

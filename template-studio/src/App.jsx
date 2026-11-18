@@ -21,7 +21,10 @@ const viewFromHash = () => {
 const EMPTY_EXTRACTION = {
   variables: [],
   meta: { title: '', description: '', outputExt: 'txt', keepFirstCase: false },
-  caseVars: { enabled: true, upper: 'Upper', lower: 'Lower' },
+  caseVars: {
+    enabled: true, upper: 'Upper', lower: 'Lower',
+    pascal: 'Pascal', camel: 'Camel', upperSnake: 'UpperSnake', snake: 'Snake',
+  },
   derivedVariables: [],
   stats: { unique: 0, occurrences: 0, types: {}, derived: 0, derivedUsed: 0, multi: 0, hasFrontMatter: false },
   warnings: [],
@@ -168,7 +171,8 @@ export default function App() {
       try {
         const r = await renderTemplate(template, values, transforms, expansions, {
           keepFirstCase,
-          table,
+          // 値の入力は TABLE のみ。常に TABLE モードで生成する。
+          table: { ...(table || {}), enabled: true },
         });
         if (!cancelled) setResult(r);
       } catch (e) {
@@ -323,7 +327,9 @@ export default function App() {
               ? 'DB 接続 → メタデータ JSON → 結合 / UPDATE / DELETE SQL'
               : view === 'excel'
                 ? 'Excel 取込 → 列マッピング JSON → INSERT SQL（1 テーブル = 1 JSON）'
-                : 'JAR / 全ファイル → SQLite + FTS5 索引 → 9 項目検索（増分スキャン · 多階層 Group · 包名/后缀/大小写/数据源过滤）'}
+                : view === 'java'
+                  ? 'JAR / 全ファイル → SQLite + FTS5 索引 → 9 項目検索（増分スキャン · 多階層 Group · 包名/后缀/大小写/数据源过滤）'
+                  : 'テンプレート入力 → 変数を TABLE で入力 → 全件のコードを表示（6 種類の命名規則変数を自動生成）'}
           </span>
         </div>}
       </header>

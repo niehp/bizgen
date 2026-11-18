@@ -108,8 +108,9 @@ function blankVariable(name) {
  * 本文の {{name}} / {{name:type}} / {{name | filter(args)}} を走査し、
  * YAML front-matter の vars で属性を上書きする。
  *
- * {{nameUpper}} / {{nameLower}} は「name から自動生成された変数」として扱い、
- * 独立した入力欄を作らず name に紐付ける。front-matter に明示宣言された名前は実変数優先。
+ * {{nameUpper}} / {{nameCamel}} / {{nameUpperSnake}} 等は「name から自動生成された変数」として扱い、
+ * 独立した入力欄を作らず name に紐付ける（全 6 種類: 先頭大文字/小文字・大驼峰・小驼峰・大蛇形・小蛇形）。
+ * front-matter に明示宣言された名前は実変数優先。
  */
 export function extract(template) {
   const { meta, body, hasFrontMatter, metaError } = splitTemplate(template);
@@ -127,7 +128,7 @@ export function extract(template) {
   const warnings = new Set();
   const derivedIndex = new Map();
 
-  // ① 全プレースホルダを収集し、自動生成変数（Upper / Lower）を解決する
+  // ① 全プレースホルダを収集し、自動生成変数（6 種類の命名規則）を解決する
   const matches = [];
   const re = newVarPattern();
   let m;
@@ -214,7 +215,7 @@ export function extract(template) {
       && v.usages.every((u) => u.filters.some((f) => f.name === 'counter'))
       && v.transforms.length === 1
       && v.transforms[0] === 'counter';
-    // すべての基礎変数に {{nameUpper}} / {{nameLower}} を自動生成する。
+    // すべての基礎変数に 6 種類の自動生成変数を付与する。
     // ただし同名の実変数が明示されている場合はそちらを優先し、派生を出さない。
     v.derived = caseVarDefinitions(v.name, caseVars)
       .filter((d) => !declaredNames.has(d.name) && !map.has(d.name));
@@ -235,7 +236,7 @@ export function extract(template) {
 
   return {
     variables,
-    caseVars: { enabled: caseVars.enabled, upper: caseVars.upper, lower: caseVars.lower },
+    caseVars: { ...caseVars },
     derivedVariables,
     table: seedTableConfig(meta, variables),
     meta: {
@@ -272,7 +273,7 @@ function overrideFilters(transforms, variable, name) {
  * 1 インスタンス分のコードを生成する。
  * replace のコールバック形式を使うため、値に $& や $1 が含まれても誤展開されない。
  * 式中に | filter があればそれを優先し、無ければ UI / front-matter の既定変換を適用する。
- * 自動生成変数は基礎値に upperFirst / lowerFirst を適用したものを「元の値」として扱うため、
+ * 自動生成変数は基礎値に該当する命名規則変換を適用したものを「元の値」として扱うため、
  * keepFirstCase が有効でも {{nameUpper}} は常に大文字開始、{{nameLower}} は常に小文字開始になる。
  */
 function renderOnce(body, variables, byName, values, transforms, globalKeep = false, derivedIndex = new Map()) {

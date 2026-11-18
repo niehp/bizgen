@@ -65,11 +65,16 @@ export function padNum(value, width, char = '0') {
 
 /** camelCase / snake_case / 区切り文字を単語に分解する */
 function words(s) {
-  return String(s)
+  const raw = String(s ?? '');
+  const parts = raw
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
     .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
     .split(/[^A-Za-z0-9]+/)
     .filter(Boolean);
+  if (parts.length) return parts;
+  // 英数字を含まない日本語 / 中国語などは分割せず 1 語として扱う（空出力を避ける）
+  const trimmed = raw.trim();
+  return trimmed ? [trimmed] : [];
 }
 
 const cap = (w) => w.charAt(0).toUpperCase() + w.slice(1);

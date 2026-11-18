@@ -34,7 +34,8 @@ export default function TemplateEditor({ template, onChange, extraction }) {
 
       <div className="syntax-hint">
         <div><code>{'{{name}}'}</code> そのまま出力</div>
-        <div><code>{'{{nameUpper}}'}</code> / <code>{'{{nameLower}}'}</code> 自動生成変数（追加入力不要）</div>
+        <div><code>{'{{nameUpper}}'}</code> / <code>{'{{nameLower}}'}</code> / <code>{'{{namePascal}}'}</code> / <code>{'{{nameCamel}}'}</code></div>
+        <div><code>{'{{nameUpperSnake}}'}</code> / <code>{'{{nameSnake}}'}</code> 6 種類の命名規則変数（入力不要）</div>
         <div><code>{'{{name | upperFirst}}'}</code> 変換（大小文字・連番）</div>
         <div><code>{'{{name | isUpperFirst}}'}</code> 先頭文字の判定・分岐</div>
         <div><code>{'{{name:type}}'}</code> 型指定（list / sequence ほか）</div>

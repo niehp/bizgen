@@ -291,7 +291,7 @@ export default function DbStudio({ onStatus }) {
     }));
   }, []);
 
-  /** SET 列の一括選択 / 一括解除（表示用の絞り込みに関係なく表の全列に適用） */
+  /** SET 列の一括選択 / 一括解除（表示件数に関係なく表の全列に適用） */
   const setAllSetColumns = useCallback((enabled) => {
     const t = findTable(metadata, updateCfg.tableId);
     setUpdateCfg((prev) => ({
@@ -299,6 +299,49 @@ export default function DbStudio({ onStatus }) {
       setColumns: enabled ? (t?.columns || []).map((c) => c.name) : [],
     }));
   }, [metadata, updateCfg.tableId]);
+
+  /** 列一覧の SELECT 全選択 / 全解除（選択中テーブルの全列に適用・列数無制限） */
+  const setAllSelectColumns = useCallback((enabled) => {
+    const t = findTable(metadata, activeTableId);
+    if (!t) return;
+    setJoinCfg((prev) => ({
+      ...prev,
+      select: { ...prev.select, [t.id]: enabled ? t.columns.map((c) => c.name) : [] },
+    }));
+  }, [metadata, activeTableId]);
+
+  /** 列一覧の 条件 全選択 / 全解除（選択中テーブルの全列に適用・列数無制限） */
+  const setAllWhereColumns = useCallback((enabled) => {
+    const t = findTable(metadata, activeTableId);
+    if (!t) return;
+    const a = sqlKind === 'join' ? plan?.aliases?.[activeTableId] : '';
+    const refs = t.columns.map((c) => (a ? `${a}.${c.name}` : c.name));
+    const setter = sqlKind === 'join' ? setJoinCfg : sqlKind === 'update' ? setUpdateCfg : setDeleteCfg;
+    setter((prev) => {
+      const cur = prev.where || [];
+      if (!enabled) {
+        const remove = new Set(refs);
+        return { ...prev, where: cur.filter((c) => !remove.has(c.column)) };
+      }
+      const have = new Set(cur.map((c) => c.column));
+      const add = refs.filter((r) => !have.has(r)).map((r) => newCondition(r, '='));
+      return { ...prev, where: [...cur, ...add] };
+    });
+  }, [metadata, activeTableId, sqlKind, plan]);
+
+  /** 表一覧の「選択中テーブルをクリア」: 選択とそれに紐づく設定をまとめて解除する */
+  const clearSelectedTables = useCallback(() => {
+    if (sqlKind === 'join') {
+      setJoinCfg((prev) => ({
+        ...prev,
+        tableIds: [], select: {}, where: [], joinTypes: {}, onOverrides: {}, orderBy: '',
+      }));
+    } else if (sqlKind === 'update') {
+      setUpdateCfg((prev) => ({ ...prev, tableId: '', setColumns: [], setValues: {}, where: [] }));
+    } else {
+      setDeleteCfg((prev) => ({ ...prev, tableId: '', where: [] }));
+    }
+  }, [sqlKind]);
 
   const toggleWhereColumn = useCallback((kind, ref) => {
     const setter = kind === 'join' ? setJoinCfg : kind === 'update' ? setUpdateCfg : setDeleteCfg;
@@ -390,6 +433,7 @@ export default function DbStudio({ onStatus }) {
           sqlKind={sqlKind}
           joinTableIds={joinCfg.tableIds}
           onToggleJoinTable={toggleJoinTable}
+          onClearSelectedTables={clearSelectedTables}
           targetTableId={targetTableId}
           onSelectTarget={selectTarget}
           isSelectChecked={isSelectChecked}
@@ -397,6 +441,8 @@ export default function DbStudio({ onStatus }) {
           isSetChecked={isSetChecked}
           onToggleSetColumn={toggleSetColumn}
           onSetAllColumns={setAllSetColumns}
+          onSetAllSelectColumns={setAllSelectColumns}
+          onSetAllWhereColumns={setAllWhereColumns}
           isWhereChecked={isWhereChecked}
           onToggleWhereColumn={toggleWhereColumn}
           plan={plan}

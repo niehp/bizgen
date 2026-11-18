@@ -105,7 +105,7 @@ function FirstCaseBar({ name, value, expanded, derived }) {
   const buttons = [
     ...(derived || []).map((d) => ({
       id: d.variant,
-      label: d.variant === 'upper' ? 'Aa 大文字版' : 'aa 小文字版',
+      label: d.label,
       expr: d.placeholder,
     })),
     { id: 'C', label: '判定で分岐', expr: `{{${name} | ifUpperFirst}}` },
@@ -162,7 +162,7 @@ function CaseVarsBox({ variable, value, expanded }) {
       {defs.map((d) => (
         <div className="casevar-row" key={d.name}>
           <code className="casevar-name">{d.placeholder}</code>
-          <span className={`case-badge case-${d.variant === 'upper' ? 'upper' : 'lower'}`}>{d.label}</span>
+          <span className={`case-badge case-${['upper', 'pascal', 'upperSnake'].includes(d.variant) ? 'upper' : 'lower'}`}>{d.label}</span>
           <code className="casevar-value">
             {expanded ? '（各件で算出）' : (applyCaseVariant(base.text, d.filter) || '（空）')}
           </code>
@@ -433,16 +433,6 @@ function FileImportPanel({ columns, rows, setRows, notify, onImportValues }) {
     setRows(append ? [...rows, ...mapped] : mapped);
     notify(`${mapped.length} 行を${append ? '追加' : '取り込み'}ました`);
   };
-  const applySingle = () => {
-    if (!mapped.length || !onImportValues) return;
-    const patch = {};
-    for (const c of columns) {
-      const v = String(mapped[0][c] ?? '');
-      if (v.trim() !== '') patch[c] = v;
-    }
-    onImportValues(patch);
-    notify('1 行目を各変数の単一値に反映しました');
-  };
 
   return (
     <div className="table-tool-panel import-panel">
@@ -521,9 +511,6 @@ function FileImportPanel({ columns, rows, setRows, notify, onImportValues }) {
             </button>
             <button type="button" className="btn btn-sm" onClick={() => apply(true)} disabled={!mapped.length}>
               末尾に追加
-            </button>
-            <button type="button" className="btn btn-sm" onClick={applySingle} disabled={!mapped.length}>
-              1 行目を単一値に反映
             </button>
             <span className="table-tool-hint">列順: {columns.join(' | ')}。ヘッダー名が変数名と一致すれば列順は任意です。</span>
           </div>
@@ -736,10 +723,9 @@ function TableInput({ variables, values, table, onTableChange, onImportValues })
       </div>
 
       <p className="table-hint">
-        同じ変数に複数の値を入力できます。1 行が 1 件のコードになります。空欄は下の「単一値（既定値）」を使用します。
-        右側の薄い列は先頭大文字 / 先頭小文字の自動生成変数で、行ごとの値から算出されます。
-        大文字で始まる値は変換後も大文字、小文字で始まる値は小文字のままです。上限 {TABLE_MAX_ROWS} 行。
-        Excel / CSV / JSON などのファイルは「ファイルからインポート」から取り込めます（1 行目を変数名にすると列順は任意）。
+        同じ変数に複数の値を入力できます。1 行が 1 件のコードになります。空欄はテンプレートの既定値を使用します。
+        右側の薄い列は自動生成変数（首字母大/小文字・大驼峰・小驼峰・大蛇形・小蛇形）で、行ごとの値から算出されます。
+        数字範囲での行生成・Excel / CSV / JSON などのファイルインポートに対応します（上限 {TABLE_MAX_ROWS} 行）。
       </p>
     </div>
   );
@@ -857,8 +843,16 @@ function Field({
     onChange: (e) => onChange(name, type === 'boolean' ? e.target.checked : e.target.value),
   };
 
+  // TABLE のみ入力方式とする。個別の単一値入力は廃止し、既定値（空欄セル用）を表示するだけにする。
   let control;
-  if (expanded) {
+  if (tableMode) {
+    const def = value == null || value === '' ? '（なし）' : String(value);
+    control = (
+      <div className="auto-note table-mode-note">
+        既定値 <code>{def}</code> — TABLE の空欄セルで使用します。値は上の TABLE で入力してください。
+      </div>
+    );
+  } else if (expanded) {
     control = <div className="auto-note">複数インスタンス生成中 — 下の一覧に値を 1 件ずつ指定してください</div>;
   } else if (autoCounter) {
     control = <div className="auto-note">出現順に 1, 2, 3… を自動採番します（入力不要）</div>;
@@ -975,10 +969,14 @@ export default function VariableForm({
   const effectiveKeep = Boolean(keepFirstCase || metaKeep);
   const autoCount = variables.reduce((sum, v) => sum + (v.derived?.length || 0), 0);
   const suffix = caseVars?.enabled
-    ? `${caseVars.upper} / ${caseVars.lower}`
+    ? Object.entries(caseVars)
+      .filter(([k, v]) => k !== 'enabled' && v)
+      .map(([, v]) => v)
+      .join(' / ')
     : 'オフ';
-  const tableState = table && typeof table === 'object' ? table : { enabled: false, rows: [] };
-  const tableMode = tableState.enabled === true;
+  // 値の入力は TABLE のみ。単一値 / 数字範囲 / 複数値リスト の個別入力モードは提供しない。
+  const tableState = { ...(table && typeof table === 'object' ? table : {}), enabled: true };
+  const tableMode = true;
 
   return (
     <section className="panel">
@@ -993,14 +991,7 @@ export default function VariableForm({
       </div>
 
       <div className="panel-options">
-        <label className="exp-toggle">
-          <input
-            type="checkbox"
-            checked={tableMode}
-            onChange={(e) => onTableChange({ ...tableState, enabled: e.target.checked })}
-          />
-          <span>TABLE 入力（1 変数 = 1 列）</span>
-        </label>
+        <span className="tag tag-teal">TABLE 入力（1 変数 = 1 列・複数値は行で入力）</span>
         <label className="exp-toggle">
           <input
             type="checkbox"
@@ -1012,9 +1003,9 @@ export default function VariableForm({
         </label>
         {metaKeep && <span className="tag tag-teal">テンプレートで有効</span>}
         <span className="option-hint">
-          {tableMode
-            ? `TABLE の 1 行 = 1 件のコード。同じ変数に複数の値を列で入力でき、Excel / CSV などのファイルも取り込めます。オフにすると数字範囲 / 複数値リストに切り替わります。接尾辞 ${suffix} で自動生成変数 ${autoCount} 個。`
-            : `接尾辞 ${suffix} で自動生成変数 ${autoCount} 個。大文字で始まる値は変換後も大文字、小文字で始まる値は小文字のまま。各変数の「複数値リスト」で複数の値を入力すると、値 1 つにつき 1 件のコードを生成します。`}
+          1 行 = 1 件のコードを生成します。同じ変数に複数の値は TABLE の行で入力し、
+          Excel / CSV などのファイル取込・数字範囲での行生成にも対応します。
+          6 種類の自動生成変数（{suffix}）は入力不要で、{autoCount} 個を各行から自動計算します。
         </span>
       </div>
 
