@@ -3,18 +3,17 @@ import {
   importTableFile, listDbMetadata, listDbTables,
   listMappings, getMapping, getMappingGroup,
   saveMapping, deleteMapping, deleteMappingGroup,
+  listPresets, savePreset, deletePreset,
 } from '../api.js';
-import { SAMPLE_METADATA } from '../../shared/dbmeta.js';
 import {
   DEFAULT_MAPPING_OPTIONS, normalizeMapping, autoMapPairs, buildInsertSql,
   deriveSheet, rowsForInsert,
 } from '../../shared/mapping.js';
+import { normalizePreset, mergePresetIntoDefaults } from '../../shared/preset.js';
 import FilePanel from './FilePanel.jsx';
 import MappingPanel from './MappingPanel.jsx';
+import PresetPanel from './PresetPanel.jsx';
 import InsertOutput from './InsertOutput.jsx';
-
-const SAMPLE_TABLES = SAMPLE_METADATA.tables;
-const SAMPLE_DEFAULT_TABLE = 'public.t_order';
 
 function readAsDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -31,17 +30,18 @@ const autoPairs = (sourceColumns, dbColumns) => autoMapPairs(sourceColumns, dbCo
 
 export default function ExcelStudio({ onStatus }) {
   const [metadataItems, setMetadataItems] = useState([]);
-  const [metadataId, setMetadataId] = useState('sample');
-  const [metadataName, setMetadataName] = useState(SAMPLE_METADATA.name);
-  const [tables, setTables] = useState(SAMPLE_TABLES);
+  const [metadataId, setMetadataId] = useState('');
+  const [metadataName, setMetadataName] = useState('');
+  const [tables, setTables] = useState([]);
 
   const [file, setFile] = useState(null);
   const [busy, setBusy] = useState('');
   const [skipRows, setSkipRows] = useState(0);
   const [headerMode, setHeaderMode] = useState('auto');
-  const [tableMappings, setTableMappings] = useState(
-    [{ tableId: SAMPLE_DEFAULT_TABLE, pairs: [], defaults: [] }],
-  );
+  const [tableMappings, setTableMappings] = useState([]);
+
+  // 固定値プリセット（列 = 固定値の再利用可能なセット）
+  const [presets, setPresets] = useState([]);
 
   const [mappingItems, setMappingItems] = useState([]);
   const [mappingGroups, setMappingGroups] = useState([]);
@@ -55,37 +55,64 @@ export default function ExcelStudio({ onStatus }) {
   const pinnedRef = useRef(false);
   const autoKeyRef = useRef('');
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const [meta, maps] = await Promise.all([listDbMetadata(), listMappings()]);
-        if (cancelled) return;
-        setMetadataItems(meta.items || []);
-        setMappingItems(maps.items || []);
-        setMappingGroups(maps.groups || []);
-        onStatus({ type: 'ok', text: 'Excel 取込 / INSERT 生成の準備ができました' });
-      } catch (e) {
-        if (!cancelled) onStatus({ type: 'error', text: `API に接続できません: ${e.message}` });
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [onStatus]);
-
   const applyMetadata = useCallback(async (id) => {
-    if (id === 'sample') {
-      setTables(SAMPLE_TABLES);
-      setMetadataName(SAMPLE_METADATA.name);
-      return;
-    }
+    if (!id) { setTables([]); setMetadataName(''); return; }
     const r = await listDbTables(id);
     setTables(r.tables || []);
     setMetadataName(r.name || id);
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      // 各 API は独立して失敗しうる（例: 旧サーバーには /api/presets が無い）。
+      // 1 つが失敗しても DB メタデータ一覧が空にならないよう、個別に結果を扱う。
+      const [metaRes, mapsRes, presetRes] = await Promise.allSettled([
+        listDbMetadata(), listMappings(), listPresets(),
+      ]);
+      if (cancelled) return;
+
+      const items = metaRes.status === 'fulfilled' ? (metaRes.value.items || []) : [];
+      setMetadataItems(items);
+      if (metaRes.status === 'rejected') {
+        onStatus({ type: 'error', text: `DB メタデータ一覧を取得できません: ${metaRes.reason?.message || metaRes.reason}` });
+      }
+      if (mapsRes.status === 'fulfilled') {
+        setMappingItems(mapsRes.value.items || []);
+        setMappingGroups(mapsRes.value.groups || []);
+      }
+      if (presetRes.status === 'fulfilled') {
+        setPresets(presetRes.value.items || []);
+      }
+
+      // 内蔵サンプルは廃止。保存済みメタデータがあれば先頭を自動選択する。
+      if (items.length) {
+        const first = items[0];
+        setMetadataId(first.id);
+        try {
+          await applyMetadata(first.id);
+        } catch (e) {
+          if (!cancelled) onStatus({ type: 'error', text: `メタデータ読込失敗: ${e.message}` });
+          return;
+        }
+        if (!cancelled) {
+          onStatus({ type: 'ok', text: `メタデータ「${first.name || first.id}」を読み込みました` });
+        }
+      } else if (metaRes.status === 'fulfilled') {
+        onStatus({ type: 'info', text: 'DB メタデータがありません。DB ページで抽出 / JSON 読込してください' });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [onStatus, applyMetadata]);
+
   const handleMetadata = useCallback(async (id) => {
+    // DB メタデータを切り替えたら、古いテーブル列に紐づくマッピングは無効なので全て破棄する
     pinnedRef.current = false;
+    autoKeyRef.current = '';
     setMetadataId(id);
+    setTableMappings([]);
+    setCurrentMappingRef('');
+    setCurrentGroupName('');
     try { await applyMetadata(id); }
     catch (e) { onStatus({ type: 'error', text: `メタデータ読込失敗: ${e.message}` }); }
   }, [applyMetadata, onStatus]);
@@ -99,6 +126,15 @@ export default function ExcelStudio({ onStatus }) {
       setFile({ ...r, data });
       setSkipRows(0);
       setHeaderMode('auto');
+      // 新しい Excel を取込んだら、旧ファイルの列に紐づくマッピング状態は破棄する。
+      // ただし保存済みマッピングを明示的に読込中（pinned）の場合は、その Excel データとして
+      // 適用する意図なので保持する（読込後にファイルを選ぶWorkflowを壊さない）。
+      if (!pinnedRef.current) {
+        setTableMappings([]);
+        setCurrentMappingRef('');
+        setCurrentGroupName('');
+      }
+      autoKeyRef.current = '';
       setMappingName((prev) => prev || `${picked.name.replace(/\.[^.]+$/, '')} → 取込`);
       onStatus({ type: 'ok', text: `${picked.name} を読み込みました（${r.rowCount} 行）` });
     } catch (e) {
@@ -137,14 +173,14 @@ export default function ExcelStudio({ onStatus }) {
 
   const tableById = useMemo(() => new Map(tables.map((t) => [t.id, t])), [tables]);
 
-  /* ---------------- テーブル選択 / マッピング編集 ---------------- */
-  const toggleTable = useCallback((id, checked) => {
+  /* ---------------- テーブル選択 / マッピング編集（単一テーブル選択） ---------------- */
+  const toggleTable = useCallback((id) => {
     pinnedRef.current = false;
     setTableMappings((prev) => {
-      if (!checked) return prev.filter((t) => t.tableId !== id);
-      if (prev.some((t) => t.tableId === id)) return prev;
+      // 同じテーブルが再度選ばれた場合は解除してマッピングもクリアする
+      if (prev.length === 1 && prev[0].tableId === id) return [];
       const cols = tableById.get(id)?.columns || [];
-      return [...prev, {
+      return [{
         tableId: id,
         pairs: file && sourceColumns.length ? autoPairs(sourceColumns, cols) : [],
         defaults: [],
@@ -198,7 +234,7 @@ export default function ExcelStudio({ onStatus }) {
   }, []);
 
   const handleSaveMapping = useCallback(async () => {
-    if (!tableMappings.length) { onStatus({ type: 'error', text: '対象テーブルをチェックしてください' }); return; }
+    if (!tableMappings.length) { onStatus({ type: 'error', text: '対象テーブルを 1 つ選択してください' }); return; }
     if (!tableMappings.some((t) => t.pairs.some((p) => p.target)
       || t.defaults.some((d) => String(d.value ?? '').trim()))) {
       onStatus({ type: 'error', text: '割り当てた Excel 列も既定値もありません' }); return;
@@ -244,8 +280,8 @@ export default function ExcelStudio({ onStatus }) {
       setHeaderMode(m.headerMode);
       setSkipRows(m.skipRows);
       setOptions({ ...DEFAULT_MAPPING_OPTIONS, ...m.options });
-      setMetadataId(m.metadataId || 'sample');
-      await applyMetadata(m.metadataId || 'sample');
+      setMetadataId(m.metadataId || '');
+      await applyMetadata(m.metadataId || '');
       setTableMappings(m.tables.length
         ? m.tables
         : [{ tableId: m.tableId, pairs: m.pairs, defaults: [] }]);
@@ -272,6 +308,54 @@ export default function ExcelStudio({ onStatus }) {
       onStatus({ type: 'ok', text: `${label} を削除しました（${r.deleted === true ? 1 : r.deleted} ファイル）` });
     } catch (e) { onStatus({ type: 'error', text: `削除失敗: ${e.message}` }); }
   }, [currentMappingRef, refreshMappings, onStatus]);
+
+  /* ---------------- 固定値プリセット ---------------- */
+  const refreshPresets = useCallback(async () => {
+    const r = await listPresets();
+    setPresets(r.items || []);
+  }, []);
+
+  const handleSavePreset = useCallback(async (raw) => {
+    setBusy('preset');
+    try {
+      const payload = normalizePreset(raw);
+      const r = await savePreset(payload);
+      pinnedRef.current = true;
+      await refreshPresets();
+      onStatus({ type: 'ok', text: `固定値プリセット「${r.preset.name}」を保存しました（${r.preset.entries.length} 列）` });
+      return r.preset;
+    } catch (e) {
+      onStatus({ type: 'error', text: `プリセット保存失敗: ${e.message}` });
+      throw e;
+    } finally { setBusy(''); }
+  }, [refreshPresets, onStatus]);
+
+  const handleDeletePreset = useCallback(async (id) => {
+    if (!id) return;
+    try {
+      await deletePreset(id);
+      await refreshPresets();
+      onStatus({ type: 'ok', text: '固定値プリセットを削除しました' });
+    } catch (e) { onStatus({ type: 'error', text: `プリセット削除失敗: ${e.message}` }); }
+  }, [refreshPresets, onStatus]);
+
+  // 選択中のテーブル（単一）の既定値へ、プリセットの列=値をマージする
+  const handleApplyPreset = useCallback((presetId) => {
+    const preset = presets.find((p) => p.id === presetId);
+    if (!preset) return;
+    if (!tableMappings.length) {
+      onStatus({ type: 'error', text: '先に対象テーブルを選択してください' });
+      return;
+    }
+    const entries = preset.entries.filter((e) => String(e.column || '').trim());
+    if (!entries.length) {
+      onStatus({ type: 'error', text: 'このプリセットには固定値がありません' });
+      return;
+    }
+    setTableMappings((prev) => prev.map((tm) => ({ ...tm, defaults: mergePresetIntoDefaults(tm.defaults, entries) })));
+    pinnedRef.current = true;
+    onStatus({ type: 'ok', text: `プリセット「${preset.name}」の固定値 ${entries.length} 列を適用しました` });
+  }, [presets, tableMappings, onStatus]);
 
   /* ---------------- INSERT SQL ---------------- */
   const rowsFromStart = useMemo(
@@ -301,7 +385,7 @@ export default function ExcelStudio({ onStatus }) {
   return (
     <div className="db-page">
       <div className="db-kind-bar">
-        <span className="db-row-label">Excel 取込 → 列マッピング → INSERT SQL（複数テーブル対応）</span>
+        <span className="db-row-label">Excel 取込 → 列マッピング → INSERT SQL（1 テーブル単位で保存）</span>
         <span className="db-kind-hint">メタデータは DB ページで保存した JSON を再利用できます</span>
       </div>
       <main className="workspace workspace-db workspace-excel">
@@ -341,6 +425,10 @@ export default function ExcelStudio({ onStatus }) {
           onLoad={handleLoadMapping}
           onDelete={handleDeleteMapping}
           busy={busy}
+          presets={presets}
+          onSavePreset={handleSavePreset}
+          onDeletePreset={handleDeletePreset}
+          onApplyPreset={handleApplyPreset}
         />
         <InsertOutput
           result={shownResult}

@@ -66,7 +66,7 @@ export default function MetadataPanel({
       {!metadata ? (
         <div className="empty">
           <p>メタデータが読み込まれていません</p>
-          <p className="empty-sub">「サンプルを読み込む」か DB に接続して抽出してください</p>
+          <p className="empty-sub">DB に接続して抽出するか、保存済み JSON を読み込んでください</p>
         </div>
       ) : (
         <>

@@ -2,8 +2,8 @@
 /**
  * 保存済みマッピング JSON + Excel ファイル → PostgreSQL INSERT SQL
  *
- * Windows コマンドラインからは generate-insert.bat 経由で実行する:
- *   generate-insert.bat --mapping <保存名|ファイルID|JSONパス> --excel <Excelパス> [--out <ファイル名>]
+ * Windows コマンドラインからは ExcelToSql.bat 経由で実行する:
+ *   ExcelToSql.bat --mapping <保存名|ファイルID|JSONパス> --excel <Excelパス> [--out <ファイル名>]
  *
  * マッピングは「1 テーブル = 1 JSON」（data/mappings/<保存名>__<表名>.json）。
  * --mapping に保存名を渡すとその保存の全テーブルを、ファイル ID を渡すと 1 テーブルだけを生成する。
@@ -17,7 +17,9 @@ import { fileURLToPath } from 'node:url';
 import {
   normalizeMapping, deriveSheet, rowsForInsert, buildInsertSql,
 } from '../shared/mapping.js';
-import { normalizeMetadata, SAMPLE_METADATA } from '../shared/dbmeta.js';
+import { normalizeMetadata } from '../shared/dbmeta.js';
+import { mergePresetIntoDefaults } from '../shared/preset.js';
+import { resolvePresetEntries, listPresetNames } from '../server/preset.js';
 import { importTable } from '../server/importer.js';
 import {
   sqlFileContents, defaultSqlFileName, normalizeSqlFileName,
@@ -35,8 +37,8 @@ const num = (v, fallback) => {
 
 const USAGE = `
 使い方:
-  generate-insert.bat --mapping <保存名|ファイルID|JSONパス> --excel <Excelパス> [オプション]
-  node cli/generate-insert.mjs --mapping <保存名|ファイルID|JSONパス> --excel <Excelパス> [オプション]
+  ExcelToSql.bat --mapping <保存名|ファイルID|JSONパス> --excel <Excelパス> [オプション]
+  node cli/ExcelToSql.mjs --mapping <保存名|ファイルID|JSONパス> --excel <Excelパス> [オプション]
 
 必須:
   --mapping <name|ID|path>
@@ -50,6 +52,7 @@ const USAGE = `
   --group <name>        保存名を明示指定（--mapping より優先。全テーブルを生成）
   --out <name>          結果を .sql ファイルへ保存（拡張子 .sql は自動付与）。未指定は標準出力
   --metadata <ID|path>  メタデータ JSON を明示指定（マッピングの metadataId を上書き）
+  --preset <名前|ID|path> 固定値プリセットを適用（列=固定値を既定値へマージ。複数回指定可）
   --sheet <name>        Excel のシート名（マッピングの sheet を上書き）
   --start-row <n>       INSERT に使うデータ行の開始行（1 起点、既定はマッピングの設定）
   --limit <n>           出力行数（0 = 全件、既定はマッピングの設定）
@@ -60,18 +63,20 @@ const USAGE = `
   --no-schema           スキーマ名を付けない
   --quote               識別子を "..." で引用
   --list                保存済みマッピング一覧を表示
+  --list-presets        保存済み固定値プリセット一覧を表示
   --help                このヘルプを表示
 
 例:
-  generate-insert.bat --list
-  generate-insert.bat --mapping "受注取込" --excel C:\\data\\order.xlsx --out order_insert
-  generate-insert.bat --mapping "受注取込__public.t_order" --excel C:\\data\\order.xlsx --start-row 3 > order_only.sql
-  generate-insert.bat --group "受注取込" --excel samples\\order_import_sample.csv --limit 100 > all.sql
+  ExcelToSql.bat --list
+  ExcelToSql.bat --list-presets
+  ExcelToSql.bat --mapping "受注取込" --excel C:\\data\\order.xlsx --out order_insert
+  ExcelToSql.bat --mapping "受注取込__public.t_order" --excel C:\\data\\order.xlsx --start-row 3 > order_only.sql
+  ExcelToSql.bat --mapping "受注取込" --excel C:\\data\\order.xlsx --preset "共通監査列" > all.sql
 `;
 
 function parseArgs(argv) {
   const out = { _: [] };
-  const flags = new Set(['help', 'list', 'template', 'no-schema', 'quote']);
+  const flags = new Set(['help', 'list', 'list-presets', 'template', 'no-schema', 'quote']);
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg.startsWith('--')) {
@@ -81,7 +86,13 @@ function parseArgs(argv) {
       if (flags.has(key)) { out[key] = true; continue; }
       const val = eq >= 0 ? arg.slice(eq + 1) : argv[++i];
       if (val === undefined) throw new Error(`--${key} の値がありません`);
-      out[key] = val;
+      // --preset は複数回指定可（後のものほど優先）
+      if (key === 'preset') {
+        if (!Array.isArray(out.preset)) out.preset = [];
+        out.preset.push(val);
+      } else {
+        out[key] = val;
+      }
     } else {
       out._.push(arg);
     }
@@ -204,7 +215,9 @@ function loadMetadata(mapping, override) {
     return { metadata: normalizeMetadata(readJson(p, 'メタデータ')), source: p };
   }
   const id = text(mapping.metadataId);
-  if (!id || id === 'sample') return { metadata: SAMPLE_METADATA, source: 'サンプルスキーマ（内蔵）' };
+  if (!id) {
+    throw new Error('マッピングに metadataId がありません。--metadata <ID|JSONパス> で保存済みメタデータを指定してください（内蔵サンプルは廃止されました）');
+  }
   const p = resolveFile(id, META_DIR, 'メタデータ');
   return { metadata: normalizeMetadata(readJson(p, 'メタデータ')), source: p };
 }
@@ -213,6 +226,11 @@ function main(argv) {
   const args = parseArgs(argv);
   if (args.help) { console.log(USAGE.trim()); return 0; }
   if (args.list) { listMappings(); return 0; }
+  if (args['list-presets']) {
+    const names = listPresetNames();
+    console.log(names.length ? names.join('\n') : '（保存済みの固定値プリセットはありません）');
+    return 0;
+  }
 
   const groupRef = text(args.group);
   const mappingRef = args.mapping || args._[0] || groupRef;
@@ -228,11 +246,23 @@ function main(argv) {
 
   const { metadata, source: metaSource } = loadMetadata(mapping, args.metadata);
   const byId = new Map(metadata.tables.map((t) => [t.id, t]));
+
+  // 固定値プリセットを全テーブルの既定値へマージ（--preset は複数回指定可、後勝ち）
+  let presetEntries = [];
+  const presetRefs = Array.isArray(args.preset) ? args.preset : (args.preset ? [args.preset] : []);
+  for (const ref of presetRefs) {
+    const r = resolvePresetEntries(ref);
+    presetEntries = mergePresetIntoDefaults(presetEntries, r.entries);
+    console.error(`[PRESET] ${r.source}: ${r.entries.length} 列を適用`);
+  }
+
   const buildTables = mapping.tables.map((t) => ({
     tableId: t.tableId,
     table: byId.get(t.tableId) || null,
     pairs: t.pairs,
-    defaults: t.defaults,
+    defaults: presetEntries.length
+      ? mergePresetIntoDefaults(t.defaults, presetEntries)
+      : t.defaults,
   }));
   const missing = buildTables.filter((t) => !t.table).map((t) => t.tableId);
   if (missing.length) {

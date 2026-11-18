@@ -1,26 +1,20 @@
 import React, { useMemo, useState } from 'react';
 import { filterTables } from '../../shared/dbmeta.js';
 import { mappingFileId } from '../../shared/mapping.js';
+import PresetPanel from './PresetPanel.jsx';
 
-// 列数は無制限。DOM に出す選択肢・行だけを間引き、検索で全件に到達できるようにする。
+// 列数は無制限。DOM に出す選択肢・行だけを間引く（絞り込み機能は持たない）。
 const OPTION_LIMIT = 200;
 const COLUMN_PAGE_SIZE = 100;
 const TABLE_PAGE_SIZE = 50;
 
-function optionSubset(options, query, selected) {
-  const q = String(query || '').trim().toLowerCase();
-  const matched = q
-    ? options.filter((o) => `${o.label} ${o.comment || ''}`.toLowerCase().includes(q))
-    : options;
+// 選択済みの列が先頭に来るように並べ替え、選択肢の上限だけをかける。
+function pinnedOptions(options, selected) {
   const keep = new Set((selected || []).filter((v) => v !== undefined && v !== null).map(String));
   const pinned = options.filter((o) => keep.has(String(o.value)));
   const pinnedSet = new Set(pinned.map((o) => o.value));
-  const rest = matched.filter((o) => !pinnedSet.has(o.value));
-  return {
-    list: [...pinned, ...rest].slice(0, OPTION_LIMIT),
-    matched: matched.length,
-    total: options.length,
-  };
+  const rest = options.filter((o) => !pinnedSet.has(o.value));
+  return [...pinned, ...rest].slice(0, OPTION_LIMIT);
 }
 
 const text = (v) => (v === undefined || v === null ? '' : String(v));
@@ -31,8 +25,6 @@ const text = (v) => (v === undefined || v === null ? '' : String(v));
  * Excel 列が無い DB 列には既定値を設定する。Excel 列がある列の既定値は空欄時の代替値。
  */
 function TableMappingEditor({ tm, table, sourceColumns, onPatch, onAutoMap }) {
-  const [columnQuery, setColumnQuery] = useState('');
-  const [sourceQuery, setSourceQuery] = useState('');
   const [pageLimit, setPageLimit] = useState(COLUMN_PAGE_SIZE);
 
   const columns = table?.columns || [];
@@ -53,19 +45,15 @@ function TableMappingEditor({ tm, table, sourceColumns, onPatch, onAutoMap }) {
     value: String(c.index), label: c.label, comment: `列 ${c.index + 1}`,
   })), [sourceColumns]);
   const scopedSources = useMemo(
-    () => optionSubset(sourceOptions, sourceQuery, usedIndices),
-    [sourceOptions, sourceQuery, usedIndices],
+    () => pinnedOptions(sourceOptions, usedIndices),
+    [sourceOptions, usedIndices],
   );
 
   const mappedCount = columns.filter((c) => pairByTarget.has(c.name)).length;
   const defaultCount = columns.filter((c) => text(defaultsByColumn.get(c.name)).trim()).length;
   const unmappedCount = Math.max(0, columns.length - mappedCount);
 
-  const q = String(columnQuery).trim().toLowerCase();
-  const matchedColumns = q
-    ? columns.filter((c) => `${c.name} ${c.type || ''} ${c.comment || ''}`.toLowerCase().includes(q))
-    : columns;
-  const shownColumns = matchedColumns.slice(0, pageLimit);
+  const shownColumns = columns.slice(0, pageLimit);
 
   const setExcelColumn = (column, raw) => {
     const index = raw === '' ? -1 : Number(raw);
@@ -95,27 +83,6 @@ function TableMappingEditor({ tm, table, sourceColumns, onPatch, onAutoMap }) {
         </button>
       </div>
 
-      <div className="db-filter-row">
-        <input
-          className="control db-filter-input"
-          value={columnQuery}
-          placeholder="DB 列名 / 列コメント / 型で絞り込み"
-          aria-label={`${tm.tableId} の DB 列絞り込み`}
-          onChange={(e) => { setColumnQuery(e.target.value); setPageLimit(COLUMN_PAGE_SIZE); }}
-        />
-        <span className="db-filter-count">{matchedColumns.length} / {columns.length} 列</span>
-      </div>
-      <div className="db-filter-row">
-        <input
-          className="control db-filter-input"
-          value={sourceQuery}
-          placeholder="Excel 列名で絞り込み（選択肢用・割当済み列は常に表示）"
-          aria-label="Excel 列の選択肢絞り込み"
-          onChange={(e) => setSourceQuery(e.target.value)}
-        />
-        <span className="db-filter-count">該当 {scopedSources.matched} / 全 {scopedSources.total} 列</span>
-      </div>
-
       <div className="db-list map-list">
         <div className="map-row map-row-head map-db-head">
           <span>DB 列（型 / コメント）</span><span>←</span><span>Excel 列</span><span>既定値</span>
@@ -137,7 +104,7 @@ function TableMappingEditor({ tm, table, sourceColumns, onPatch, onAutoMap }) {
                 onChange={(e) => setExcelColumn(c.name, e.target.value)}
               >
                 <option value="">（Excel 列なし → 既定値）</option>
-                {scopedSources.list.map((o) => (
+                {scopedSources.map((o) => (
                   <option key={o.value} value={o.value}>{o.label}</option>
                 ))}
               </select>
@@ -151,17 +118,17 @@ function TableMappingEditor({ tm, table, sourceColumns, onPatch, onAutoMap }) {
             </div>
           );
         })}
-        {!shownColumns.length && <div className="db-empty">該当する DB 列がありません</div>}
-        {shownColumns.length < matchedColumns.length && (
+        {!shownColumns.length && <div className="db-empty">DB 列がありません</div>}
+        {shownColumns.length < columns.length && (
           <div className="db-list-more">
-            <span>{shownColumns.length} / {matchedColumns.length} 件を表示（上限なし）</span>
+            <span>{shownColumns.length} / {columns.length} 列を表示</span>
             <button type="button" className="link-btn" onClick={() => setPageLimit((n) => n + COLUMN_PAGE_SIZE)}>
               さらに {COLUMN_PAGE_SIZE} 件を表示
             </button>
           </div>
         )}
         <div className="db-tip">
-          表 → Excel の方向で割り当てます。同じ Excel 列を複数の DB 列（別テーブルも可）へ選べます。
+          表 → Excel の方向で割り当てます。同じ Excel 列を複数の DB 列へ選べます。
           Excel 列なしの DB 列は「既定値」が定数になり、Excel 列ありの列は空欄時だけ既定値を使います。
           <code>CURRENT_TIMESTAMP</code> / <code>NOW()</code> / <code>DEFAULT</code> はそのまま出力。
         </div>
@@ -175,12 +142,14 @@ export default function MappingPanel({
   tables, tableMappings, onToggleTable, onPatchTable, onAutoMapTable,
   sourceColumns, mappingItems, mappingGroups, mappingName, onMappingName,
   currentMappingRef, currentGroupName, onSave, onLoad, onDelete, busy,
+  presets, onSavePreset, onDeletePreset, onApplyPreset,
 }) {
   const [tableFilter, setTableFilter] = useState('');
   const [tableLimit, setTableLimit] = useState(TABLE_PAGE_SIZE);
 
   const visibleTables = useMemo(() => filterTables(tables, tableFilter), [tables, tableFilter]);
-  const checkedIds = useMemo(() => new Set(tableMappings.map((t) => t.tableId)), [tableMappings]);
+  // ラジオは単一選択。複数表の保存済みマッピングを読込んだ場合も先頭 1 表だけを選択状態にする。
+  const selectedTableId = tableMappings[0]?.tableId;
   const totalPairs = tableMappings.reduce((n, t) => n + t.pairs.filter((p) => p.target).length, 0);
   const shownTables = visibleTables.slice(0, tableLimit);
   const tableById = useMemo(() => new Map(tables.map((t) => [t.id, t])), [tables]);
@@ -208,7 +177,7 @@ export default function MappingPanel({
           <label className="db-field">
             <span>DB メタデータ</span>
             <select className="control" value={metadataId} onChange={(e) => onMetadata(e.target.value)}>
-              <option value="sample">サンプルスキーマ（FMS / CRM）</option>
+              <option value="">（DB メタデータを選択）</option>
               {metadataItems.map((m) => (
                 <option key={m.id} value={m.id}>{m.name || m.id}（{m.tableCount} テーブル）</option>
               ))}
@@ -229,9 +198,10 @@ export default function MappingPanel({
             {shownTables.map((t) => (
               <label className="map-table-item" key={t.id}>
                 <input
-                  type="checkbox"
-                  checked={checkedIds.has(t.id)}
-                  onChange={(e) => onToggleTable(t.id, e.target.checked)}
+                  type="radio"
+                  name="db-table-select"
+                  checked={selectedTableId === t.id}
+                  onChange={() => onToggleTable(t.id)}
                 />
                 <code>{t.id}</code>
                 <span className="db-filter-count">{t.columns.length} 列</span>
@@ -247,7 +217,7 @@ export default function MappingPanel({
               </div>
             )}
           </div>
-          {metadataName && <div className="db-tip">メタデータ: {metadataName} · テーブル数上限なし。チェックした表の順に INSERT を生成します</div>}
+          {metadataName && <div className="db-tip">メタデータ: {metadataName} · 対象テーブルを 1 つ選びます。DB メタデータを変更すると列マッピングは全てクリアされます</div>}
         </div>
 
         {tableMappings.map((tm) => (
@@ -261,8 +231,17 @@ export default function MappingPanel({
           />
         ))}
         {!tableMappings.length && (
-          <div className="db-empty">対象テーブルをチェックしてください（複数選択可）</div>
+          <div className="db-empty">対象テーブルを 1 つ選択してください（ラジオボタン）</div>
         )}
+
+        <PresetPanel
+          presets={presets}
+          busy={busy}
+          hasTable={tableMappings.length > 0}
+          onSave={onSavePreset}
+          onDelete={onDeletePreset}
+          onApply={onApplyPreset}
+        />
 
         <div className="map-save-box">
           <div className="db-section-head">
@@ -273,7 +252,7 @@ export default function MappingPanel({
             <input
               className="control"
               value={mappingName}
-              placeholder="マッピング名（例: 受注取込 → t_order ほか）"
+              placeholder="マッピング名（例: 受注取込 → t_order）"
               aria-label="マッピング名"
               onChange={(e) => onMappingName(e.target.value)}
             />

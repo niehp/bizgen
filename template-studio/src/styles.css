@@ -88,6 +88,7 @@ body {
   color: var(--blue); font-family: inherit; font-size: 11px;
 }
 .link-btn:hover { text-decoration: underline; }
+.link-btn-danger { color: var(--red); }
 
 /* ---------- layout ---------- */
 .workspace {
@@ -604,6 +605,8 @@ body {
 .db-sql { flex: 1; min-height: 170px; white-space: pre; font-size: 11.5px; }
 
 /* ---------- Excel 取込 / 列マッピング / INSERT ---------- */
+/* Excel データ表示を広く、生成 SQL を狭くする（① > ② > ③） */
+.workspace-excel { grid-template-columns: 1.55fr 1.05fr .8fr; }
 .workspace-excel .db-panel .panel-head { margin-bottom: 9px; }
 .excel-info { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
 .excel-options { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; padding: 8px; margin-bottom: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-soft); }
@@ -638,7 +641,7 @@ body {
 .map-table-item:last-child { border-bottom: 0; }
 .map-table-item:hover { background: var(--surface-soft); }
 .map-table-item code { font-family: var(--mono); font-size: 11px; word-break: break-all; flex: 1; min-width: 0; }
-.map-table-item input[type="checkbox"] { flex: none; }
+.map-table-item input[type="checkbox"], .map-table-item input[type="radio"] { flex: none; }
 .map-table-item .db-filter-count { flex: none; font-size: 10px; }
 .tm-block { border: 1px solid var(--border); border-radius: 8px; background: var(--surface-soft); padding: 9px; margin-bottom: 9px; }
 .tm-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 7px; }
@@ -658,6 +661,21 @@ body {
 .map-defaults { flex: none; max-height: 200px; margin-top: 4px; }
 .map-default-row { grid-template-columns: minmax(120px, 1fr) minmax(120px, 1.4fr); }
 .tm-stats { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 6px; }
+
+/* 固定値プリセット */
+.map-preset-box { padding: 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-soft); margin-bottom: 9px; }
+.map-preset-box .map-save-row { margin-bottom: 6px; }
+.map-preset-box .map-save-row .control { font-size: 11px; padding: 4px 7px; min-width: 0; flex: 1; }
+.map-preset-box .map-save-row .spacer { flex: 1; }
+.preset-preview { display: flex; flex-wrap: wrap; gap: 4px; max-height: 70px; overflow-y: auto; margin-bottom: 6px; }
+.preset-preview code { font-family: var(--mono); font-size: 10px; padding: 2px 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); word-break: break-all; }
+.preset-editor { border: 1px solid var(--border); border-radius: 6px; background: var(--surface); padding: 7px; margin-bottom: 6px; }
+.preset-entry-head { display: grid; grid-template-columns: minmax(90px, 1fr) minmax(110px, 1.4fr) 22px; gap: 6px; font-size: 10px; color: var(--hint); padding: 2px 2px 4px; }
+.preset-entry-list { max-height: 180px; overflow-y: auto; }
+.preset-entry-row { display: grid; grid-template-columns: minmax(90px, 1fr) minmax(110px, 1.4fr) 22px; gap: 6px; align-items: center; padding: 3px 0; border-bottom: 1px solid var(--border); }
+.preset-entry-row:last-child { border-bottom: 0; }
+.preset-entry-row .control { font-size: 11px; padding: 4px 7px; min-width: 0; }
+.preset-entry-row .link-btn { font-size: 14px; text-align: center; }
 
 @media (max-width: 1250px) {
   .workspace, .workspace-db { grid-template-columns: 1fr 1fr; overflow-y: auto; }

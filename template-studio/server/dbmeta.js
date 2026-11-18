@@ -10,7 +10,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import {
-  DIALECTS, dialectInfo, normalizeMetadata, makeTableId, SAMPLE_METADATA,
+  DIALECTS, dialectInfo, normalizeMetadata, makeTableId,
 } from '../shared/dbmeta.js';
 
 const require = createRequire(import.meta.url);
@@ -32,10 +32,6 @@ const rv = (r, key) => text(row(r, key));
 /* ---------------- JSON ストア ---------------- */
 function ensureDir() {
   fs.mkdirSync(DIR, { recursive: true });
-  const sample = path.join(DIR, 'sample-fms.json');
-  if (!fs.existsSync(sample)) {
-    fs.writeFileSync(sample, JSON.stringify(SAMPLE_METADATA, null, 2), 'utf8');
-  }
 }
 
 function safeId(id) {
@@ -175,10 +171,6 @@ export function deleteMetadata(id) {
   if (!fs.existsSync(p)) return false;
   fs.unlinkSync(p);
   return true;
-}
-
-export function sampleMetadata() {
-  return SAMPLE_METADATA;
 }
 
 /* ---------------- ドライバ ---------------- */

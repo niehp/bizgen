@@ -103,22 +103,61 @@ CREATE TRIGGER IF NOT EXISTS java_fts_au AFTER UPDATE ON java_entries BEGIN
   VALUES (new.id, ${FTS_COLUMNS.map((c) => `new.${c}`).join(', ')});
 END;
 `;
-db.exec(FTS_DDL);
 
-// 兼容已有索引库：补齐字段列，必要时重建 FTS5（旧版索引没有 field_name / field_comment）
+/**
+ * node:sqlite は Node のビルドによって FTS5 拡張を含む場合と含まない場合がある。
+ * 起動時に実際に作成して確認し、使えなければ FTS を丸ごと無効化して
+ * LIKE あいまい検索へフォールバックする（サーバー全体が落ちないように）。
+ * 旧ビルドで作った java_fts が DB に残っていても PRAGMA でモジュールを
+ * 読み込もうとすると "no such module: fts5" になるため、その場合は
+ * トリガ / 仮想テーブルを削除して通常テーブルだけの運用に切り替える。
+ */
+function detectFts5() {
+  // 明示的な無効化オプション（FTS5 がビルドされていても LIKE 検索へ強制したい場合）
+  if (process.env.TS_DISABLE_FTS5 === '1') return false;
+  try {
+    const probe = new DatabaseSync(':memory:');
+    probe.exec('CREATE VIRTUAL TABLE __fts_probe USING fts5(x)');
+    probe.close();
+    return true;
+  } catch {
+    return false;
+  }
+}
+let FTS_AVAILABLE = detectFts5();
+
+// 兼容已有索引库：补齐字段列（FTS の有無にかかわらず常に実行）
 const sourceCols = db.prepare('PRAGMA table_info(java_sources)').all().map((c) => c.name);
 if (!sourceCols.includes('group_name')) db.exec("ALTER TABLE java_sources ADD COLUMN group_name TEXT NOT NULL DEFAULT ''");
 const entryCols = db.prepare('PRAGMA table_info(java_entries)').all().map((c) => c.name);
 if (!entryCols.includes('field_name')) db.exec("ALTER TABLE java_entries ADD COLUMN field_name TEXT NOT NULL DEFAULT ''");
 if (!entryCols.includes('field_comment')) db.exec("ALTER TABLE java_entries ADD COLUMN field_comment TEXT NOT NULL DEFAULT ''");
 db.exec('CREATE INDEX IF NOT EXISTS idx_entries_field ON java_entries(field_name)');
-const ftsCols = db.prepare('PRAGMA table_info(java_fts)').all().map((c) => c.name);
-if (!FTS_COLUMNS.every((c) => ftsCols.includes(c))) {
+
+if (FTS_AVAILABLE) {
+  try {
+    db.exec(FTS_DDL);
+    const ftsCols = db.prepare('PRAGMA table_info(java_fts)').all().map((c) => c.name);
+    if (!FTS_COLUMNS.every((c) => ftsCols.includes(c))) {
+      db.exec(`DROP TRIGGER IF EXISTS java_fts_ai; DROP TRIGGER IF EXISTS java_fts_ad;
+               DROP TRIGGER IF EXISTS java_fts_au; DROP TABLE IF EXISTS java_fts;`);
+      db.exec(FTS_DDL);
+      db.exec(`INSERT INTO java_fts(rowid, ${FTS_COLUMNS.join(', ')})
+               SELECT id, ${FTS_COLUMNS.join(', ')} FROM java_entries`);
+    }
+  } catch (e) {
+    // 既存 DB に古い java_fts が残っている etc. で FTS 初期化が失敗した場合も
+    // サーバーを落とさず LIKE 検索へ切り替える。
+    console.warn('[java-store] FTS5 初期化に失敗したため LIKE 検索へ切り替えます:', e.message);
+    FTS_AVAILABLE = false;
+  }
+}
+if (!FTS_AVAILABLE) {
+  // 旧ビルドが作った FTS トリガが残ると java_entries への INSERT/UPDATE/DELETE が
+  // 都存在しない fts5 モジュールを参照して失敗するため、まとめて削除する。
   db.exec(`DROP TRIGGER IF EXISTS java_fts_ai; DROP TRIGGER IF EXISTS java_fts_ad;
-           DROP TRIGGER IF EXISTS java_fts_au; DROP TABLE IF EXISTS java_fts;`);
-  db.exec(FTS_DDL);
-  db.exec(`INSERT INTO java_fts(rowid, ${FTS_COLUMNS.join(', ')})
-           SELECT id, ${FTS_COLUMNS.join(', ')} FROM java_entries`);
+           DROP TRIGGER IF EXISTS java_fts_au;`);
+  try { db.exec('DROP TABLE IF EXISTS java_fts'); } catch { /* 存在しなければ無視 */ }
 }
 
 // 不保留任何内置示例数据：清理旧版本可能写入的 demo 批次
@@ -215,6 +254,7 @@ export function stats() {
     texts: one("SELECT COUNT(*) n FROM java_entries WHERE kind = 'text'").n,
     byKind: Object.fromEntries(asRows(db.prepare('SELECT kind, COUNT(*) n FROM java_sources GROUP BY kind'))
       .map((r) => [r.kind, r.n])),
+    fts5: FTS_AVAILABLE,
   };
 }
 
@@ -863,7 +903,13 @@ export function search(params = {}) {
   }
 
   let candidates;
-  if (mode === 'fulltext') {
+  if (mode === 'fulltext' && !FTS_AVAILABLE) {
+    // FTS5 が使えない Node ビルドでは LIKE あいまい検索へフォールバックする
+    candidates = fetchCandidates({
+      sourceId, sourceIds, sourceKinds, sourceGroup, extensions, packageFilters,
+      needle: anchorOf(terms.join(' ')), fields, mode: 'fuzzy', caseSensitive,
+    });
+  } else if (mode === 'fulltext') {
     const colNames = fields.map((f) => f.col);
     const matchExpr = terms.map((t) => colNames.map((c) => `${c} : "${t.replace(/"/g, '""')}"*`).join(' OR ')).join(' OR ');
     let sql = `SELECT ${ALL_COLUMNS}, e.id, e.source_id, e.file_id, e.kind, e.path, e.start_line, e.end_line, s.name source_name, s.kind source_kind, s.group_name source_group_name

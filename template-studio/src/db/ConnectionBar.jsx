@@ -11,7 +11,7 @@ const NUMERIC = new Set(['port']);
 
 export default function ConnectionBar({
   connection, onConnectionChange, drivers, items, sourceId, metadata, busy,
-  onTest, onExtract, onLoadSample, onLoadItem, onDeleteItem, onUpload,
+  onTest, onExtract, onLoadItem, onDeleteItem, onUpload,
   onSaveSnapshot, onStatus,
 }) {
   const [showJson, setShowJson] = useState(false);
@@ -60,7 +60,6 @@ export default function ConnectionBar({
           </div>
         </div>
         <div className="db-bar-actions">
-          <button type="button" className="btn btn-ghost" onClick={onLoadSample}>サンプルを読み込む</button>
           <button type="button" className="btn btn-ghost" onClick={onTest} disabled={Boolean(busy)}>
             {busy === 'test' ? '接続中…' : '接続テスト'}
           </button>

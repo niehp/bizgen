@@ -62,7 +62,10 @@ export default function SqlOutput({ result, sqlKind, onStatus, defaultFileName }
           SQL をコピー
         </button>
         <span className="spacer" />
-        <span className="mini-stat">1 件の SQL（{KIND_LABEL[sqlKind]}）· 列コメントなし（{`/*camelCase*/'' / 99 / '2026-12-01'`}）</span>
+        <span className="mini-stat">
+          1 件の SQL（{KIND_LABEL[sqlKind]}）· 条件値は列型別（{`/*camelCase*/'' / 99 / '2026-12-01'`}）
+          {sqlKind !== 'join' ? ' · UPDATE/DELETE は DB 列コメントを表示' : ''}
+        </span>
       </div>
 
       <div className="db-file-bar">

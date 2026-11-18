@@ -11,6 +11,7 @@ import { APP_DB_DIALECT } from '../shared/dbmeta.js';
 import { buildInsertSql } from '../shared/mapping.js';
 import * as dbmeta from './dbmeta.js';
 import * as mappings from './mapping.js';
+import * as presets from './preset.js';
 import * as javaIndex from './java-store.js';
 import {
   listTemplates,
@@ -129,8 +130,6 @@ app.get('/api/db/drivers', wrap(() => ({
   dialect: APP_DB_DIALECT,
 })));
 
-app.get('/api/db/sample', wrap(() => ({ metadata: dbmeta.sampleMetadata() })));
-
 app.post('/api/db/test', wrapAsync((req) =>
   dbmeta.testConnection(onlyPostgres(req.body?.connection))));
 
@@ -229,6 +228,25 @@ app.post('/api/mapping/insert', wrap((req) => ({
   }),
 })));
 
+/* ---------------- 固定値プリセット（列 = 固定値） ---------------- */
+app.get('/api/presets', wrap(() => ({ items: presets.listPresets() })));
+
+app.get('/api/presets/:id', wrap((req) => {
+  const preset = presets.getPreset(req.params.id);
+  if (!preset) throw new Error('固定値プリセットが見つかりません');
+  return { preset };
+}));
+
+app.post('/api/presets', wrap((req) => {
+  const r = presets.savePreset(req.body?.preset ?? req.body, req.body?.id);
+  return { id: r.info.id, preset: r.preset, info: r.info };
+}));
+
+app.delete('/api/presets/:id', wrap((req) => {
+  if (!presets.deletePreset(req.params.id)) throw new Error('固定値プリセットが見つかりません');
+  return { deleted: true };
+}));
+
 /* ---------------- Java 代码索引 / 全文检索 ---------------- */
 app.get('/api/java/sources', wrap(() => ({
   sources: javaIndex.listSources(),
@@ -280,6 +298,11 @@ app.get('/api/java/entries/:id', wrap((req) => javaIndex.getEntry(
   req.params.id, Number(req.query.context || 6), String(req.query.q || ''),
   req.query.cs === '1' || req.query.cs === 'true',
 )));
+
+// 未定義の API は SPA の index.html を返さず、JSON 404 を返す。
+// こうすると旧クライアント/旧サーバーが混在しても res.json() が失敗せず、
+// フロント側で個別にエラー扱いできる（メタデータ一覧が空になる事故を防ぐ）。
+app.use('/api', (_req, res) => res.status(404).json({ ok: false, error: 'API endpoint not found' }));
 
 const dist = path.join(__dirname, '..', 'dist');
 if (fs.existsSync(dist)) {

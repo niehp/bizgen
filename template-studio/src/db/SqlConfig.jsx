@@ -33,6 +33,20 @@ function ConditionEditor({ conditions, onChange, columnOptions, style, typeOf })
   return (
     <div className="db-cond-box">
       <div className="db-section-head"><span>WHERE 条件</span><span className="db-section-sub">{"空欄＝列型別 /*camelCase*/'' / 99 / '2026-12-01'"}</span></div>
+      <div className="db-filter-row">
+        <span className="db-section-sub">条件列の一括設定</span>
+        <button
+          type="button" className="link-btn"
+          disabled={!columnOptions.length}
+          onClick={() => onChange(columnOptions.map((o) => newCondition(o.value, '=')))}
+        >条件を全選択</button>
+        <button
+          type="button" className="link-btn"
+          disabled={!conditions.length}
+          onClick={() => onChange([])}
+        >条件を全解除</button>
+        <span className="db-filter-count">{conditions.length} / {columnOptions.length} 条件</span>
+      </div>
       {conditions.length === 0 && <div className="db-empty">条件列を選ぶか「条件を追加」してください</div>}
       {conditions.map((c, i) => (
         <div className="cond-row" key={`${c.column}-${i}`}>
@@ -93,7 +107,7 @@ function ConditionEditor({ conditions, onChange, columnOptions, style, typeOf })
   );
 }
 
-function JoinEditor({ plan, joinCfg, onJoinType, onOnPairs, onResetOn, allColumnOptions }) {
+function JoinEditor({ plan, joinCfg, onJoinType, onOnPairs, onResetOn, onRemoveJoinTable, allColumnOptions }) {
   if (!plan || plan.joins.length < 2) {
     return <div className="db-empty">結合するテーブルを 2 つ以上選択してください</div>;
   }
@@ -120,6 +134,13 @@ function JoinEditor({ plan, joinCfg, onJoinType, onOnPairs, onResetOn, allColumn
               </select>
               <span className="db-section-sub">親 {j.parentAlias}</span>
               {override && <button type="button" className="link-btn" onClick={() => onResetOn(idx)}>自動推定に戻す</button>}
+              {onRemoveJoinTable && (
+                <button
+                  type="button" className="link-btn link-btn-danger"
+                  title="このテーブルを結合から外す"
+                  onClick={() => onRemoveJoinTable(j.tableId)}
+                >この表を削除</button>
+              )}
             </div>
             {pairs.length === 0 && <div className="db-empty db-warn-text">結合条件が未設定です（ON 1 = 1）</div>}
             {pairs.map((p, n) => (
@@ -214,6 +235,7 @@ function SetValueEditor({ updateCfg, onChange, style, typeOf }) {
 export default function SqlConfig({
   metadata, sqlKind, options, onOptions,
   plan, joinCfg, onJoinType, onOnPairs, onResetOn, onJoinPatch, onSetOrderBy,
+  onRemoveJoinTable,
   updateCfg, onSetValues,
   conditions, onConditions, columnOptions, allColumnOptions,
 }) {
@@ -324,6 +346,7 @@ export default function SqlConfig({
             onJoinType={onJoinType}
             onOnPairs={onOnPairs}
             onResetOn={onResetOn}
+            onRemoveJoinTable={onRemoveJoinTable}
             allColumnOptions={allScoped.list}
           />
         )}
@@ -342,10 +365,12 @@ export default function SqlConfig({
 
         {!metadata && <div className="db-empty">メタデータを読み込むと設定できます</div>}
         <div className="db-tip">
-          説明用の列コメント（-- ...）は既定では注入しません（「列コメントを付与」を ON にした場合のみ）。
+          UPDATE / DELETE の SET・WHERE 行には DB の列コメント（-- ...）を既定で表示します。
           条件値の埋め込みコメントは指定書式のバインド名です。
           UPDATE の SET は表の全列が既定で、不要な列は左の列一覧で解除できます。
-          SQL は右側に選択中の 1 種類だけを全件表示し、コピーのみ対応します。
+          条件列・SET 列とも「全選択 / 全解除」で一括設定できます。
+          結合条件パネルの「この表を削除」で結合からテーブルを外せます。
+          SQL は右側に選択中の 1 種類だけを全件表示し、ダウンロード（.sql 自動付与）に対応します。
         </div>
       </div>
     </section>

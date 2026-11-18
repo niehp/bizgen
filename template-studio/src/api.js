@@ -40,8 +40,6 @@ export const deleteTemplate = (id) =>
 /* ---------------- DB メタデータ / SQL 生成 ---------------- */
 export const listDbDrivers = () => request('/db/drivers');
 
-export const getSampleMetadata = () => request('/db/sample');
-
 export const testDbConnection = (connection) =>
   request('/db/test', { method: 'POST', body: JSON.stringify({ connection }) });
 
@@ -94,6 +92,17 @@ export const deleteMapping = (id) =>
 
 export const buildInsertSqlApi = (payload) =>
   request('/mapping/insert', { method: 'POST', body: JSON.stringify(payload) });
+
+/* ---------------- 固定値プリセット ---------------- */
+export const listPresets = () => request('/presets');
+
+export const getPreset = (id) => request(`/presets/${encodeURIComponent(id)}`);
+
+export const savePreset = (preset, id) =>
+  request('/presets', { method: 'POST', body: JSON.stringify({ preset, id }) });
+
+export const deletePreset = (id) =>
+  request(`/presets/${encodeURIComponent(id)}`, { method: 'DELETE' });
 
 /* ---------------- Java 代码索引 / 全文检索 ---------------- */
 export const listJavaSources = () => request('/java/sources');

@@ -10,7 +10,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "start": "node server/index.js",
-    "insert": "node cli/generate-insert.mjs"
+    "insert": "node cli/ExcelToSql.mjs",
+    "java-index": "node cli/java-index.mjs"
   },
   "dependencies": {
     "cors": "^2.8.5",

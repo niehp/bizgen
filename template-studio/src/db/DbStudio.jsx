@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  listDbDrivers, getSampleMetadata, testDbConnection, extractDbMetadata,
+  listDbDrivers, testDbConnection, extractDbMetadata,
   listDbMetadata, getDbMetadata, saveDbMetadata, deleteDbMetadata,
 } from '../api.js';
 import {
@@ -108,17 +108,22 @@ export default function DbStudio({ onStatus }) {
     let cancelled = false;
     (async () => {
       try {
-        const [d, list, sample] = await Promise.all([
-          listDbDrivers(), listDbMetadata(), getSampleMetadata(),
-        ]);
+        const [d, list] = await Promise.all([listDbDrivers(), listDbMetadata()]);
         if (cancelled) return;
         setDrivers(d.drivers || []);
-        setItems(list.items || []);
-        applyMetadata(
-          sample.metadata,
-          'sample-fms',
-          'サンプルメタデータを読み込みました。DB 接続 / JSON 読込に切り替え可能です',
-        );
+        const items = list.items || [];
+        setItems(items);
+        // 内蔵サンプルは廃止。保存済みメタデータがあれば先頭を自動読込。
+        if (items.length) {
+          try {
+            const r = await getDbMetadata(items[0].id);
+            if (!cancelled) applyMetadata(r.metadata, items[0].id, `メタデータ「${r.metadata.name || items[0].id}」を読み込みました`);
+          } catch (e) {
+            if (!cancelled) onStatus({ type: 'info', text: '保存済みメタデータの読込に失敗しました。一覧から選択してください' });
+          }
+        } else if (!cancelled) {
+          onStatus({ type: 'info', text: 'DB に接続してメタデータを抽出するか、JSON をアップロードしてください' });
+        }
       } catch (e) {
         if (!cancelled) onStatus({ type: 'error', text: `DB API に接続できません: ${e.message}` });
       }
@@ -151,13 +156,6 @@ export default function DbStudio({ onStatus }) {
     } catch (e) {
       onStatus({ type: 'error', text: `抽出失敗: ${e.message}` });
     } finally { setBusy(''); }
-  };
-
-  const handleLoadSample = async () => {
-    try {
-      const r = await getSampleMetadata();
-      applyMetadata(r.metadata, 'sample-fms', 'サンプルメタデータを読み込みました');
-    } catch (e) { onStatus({ type: 'error', text: e.message }); }
   };
 
   const handleLoadItem = async (id) => {
@@ -364,7 +362,6 @@ export default function DbStudio({ onStatus }) {
         busy={busy}
         onTest={handleTest}
         onExtract={handleExtract}
-        onLoadSample={handleLoadSample}
         onLoadItem={handleLoadItem}
         onDeleteItem={handleDeleteItem}
         onUpload={handleUpload}
@@ -414,6 +411,7 @@ export default function DbStudio({ onStatus }) {
           onJoinType={onJoinType}
           onOnPairs={onOnPairs}
           onResetOn={onResetOn}
+          onRemoveJoinTable={toggleJoinTable}
           onJoinPatch={onJoinPatch}
           onSetOrderBy={onSetOrderBy}
           updateCfg={updateCfg}

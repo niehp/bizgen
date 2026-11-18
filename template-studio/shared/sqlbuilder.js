@@ -98,6 +98,27 @@ function valueOf(raw, name, style, flags = {}) {
  * WHERE 条件の列参照（t1.col / col）からメタデータ上の型名を引く。
  * 別名付きは plan.aliases で表を逆引きし、無ければ対象表 → 同名列の順に探す。
  */
+/**
+ * 列参照（t1.col / col）からメタデータ上の「列コメント」を引く。
+ * columnTypeOf と同じ解決順で、UPDATE / DELETE の SQL に DB 列コメントを表示するために使う。
+ */
+export function columnCommentOf(metadata, plan, cfg, ref) {
+  const path = String(ref ?? '');
+  const dot = path.lastIndexOf('.');
+  const alias = dot >= 0 ? path.slice(0, dot) : '';
+  const colName = dot >= 0 ? path.slice(dot + 1) : path;
+  let table = null;
+  if (alias && plan?.aliases) {
+    const tableId = Object.keys(plan.aliases).find((id) => plan.aliases[id] === alias);
+    if (tableId) table = findTable(metadata, tableId);
+  }
+  if (!table && cfg?.tableId) table = findTable(metadata, cfg.tableId);
+  if (!table && plan?.tables?.length) {
+    table = plan.tables.find((t) => t.columns.some((c) => c.name === colName));
+  }
+  return table?.columns.find((c) => c.name === colName)?.comment || '';
+}
+
 export function columnTypeOf(metadata, plan, cfg, ref) {
   const path = String(ref ?? '');
   const dot = path.lastIndexOf('.');
@@ -143,7 +164,10 @@ export function buildWhere(conditions, ctx) {
   active.forEach((c, i) => {
     const prefix = i === 0 ? '' : (c.conjunction === 'OR' ? 'OR ' : 'AND ');
     let text = `    ${prefix}${renderCondition(c, ctx)}`;
-    if (ctx.addComments && c.comment) text += ` -- ${c.comment}`;
+    // UPDATE / DELETE では DB の列コメントを既定で表示する。
+    // 個別条件のコメント（c.comment）があればそれを優先し、無ければメタデータの列コメントを使う。
+    const note = c.comment || (ctx.showColumnComments ? ctx.commentOf?.(c.column) : '');
+    if (note) text += ` -- ${note}`;
     lines.push(text);
   });
   return lines;
@@ -254,13 +278,18 @@ function conditionWarnings(table, where, kind, warnings) {
 }
 
 function ctxOf(metadata, cfg) {
+  // UPDATE / DELETE は WHERE / SET に DB 列コメントを表示するのが既定。
+  // 「列コメントを付与」を明示的に OFF（false）にした場合のみ抑制する。
+  const showColumnComments = cfg.showColumnComments !== false;
   return {
     dialect: cfg.dialect || metadata?.dialect || 'postgres',
     quote: Boolean(cfg.quoteIdentifiers),
     includeSchema: cfg.includeSchema !== false,
     addComments: Boolean(cfg.addComments),
+    showColumnComments,
     style: cfg.placeholderStyle || DEFAULT_PLACEHOLDER_STYLE,
     typeOf: (ref) => columnTypeOf(metadata, null, cfg, ref),
+    commentOf: (ref) => columnCommentOf(metadata, null, cfg, ref),
   };
 }
 
@@ -289,7 +318,8 @@ export function buildUpdate(metadata, cfg = {}) {
     const value = valueOf(cfg.setValues?.[name], name, ctx.style, literalFlags(col?.type));
     return {
       expr: `    ${ident(name, ctx.dialect, ctx.quote)} = ${value}`,
-      comment: ctx.addComments ? col?.comment || '' : '',
+      // UPDATE の SET 行にも DB 列コメントを既定で表示する
+      comment: ctx.showColumnComments ? col?.comment || '' : '',
     };
   });
   conditionWarnings(table, cfg.where, 'update', warnings);

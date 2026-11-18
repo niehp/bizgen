@@ -322,13 +322,17 @@ function buildTableInsert({ table, tableId, pairs = [], defaults = [], rows, kin
     return fail(`テーブル ${label} にマッピングされた列・既定値がありません`);
   }
 
-  const ordered = [...active, ...defaultItems.map((d) => ({ index: -1, target: d.target, isDefault: true, raw: d.value }))];
+  // 列順はマッピング設定順ではなく、テーブル（メタデータ）の列定義順に従う。
+  const columnOrder = new Map(columns.map((c, i) => [text(c?.name), i]));
+  const ordered = [
+    ...active,
+    ...defaultItems.map((d) => ({ index: -1, target: d.target, isDefault: true, raw: d.value })),
+  ].sort((a, b) => (columnOrder.get(a.target) ?? Number.MAX_SAFE_INTEGER)
+    - (columnOrder.get(b.target) ?? Number.MAX_SAFE_INTEGER));
   const tableName = qualifiedTable(table, 'postgres', { includeSchema, quote });
-  const columnBlock = [`INSERT INTO ${tableName} (`];
-  ordered.forEach((p, i) => {
-    columnBlock.push(`    ${ident(p.target, 'postgres', quote)}${i < ordered.length - 1 ? ',' : ''}`);
-  });
-  columnBlock.push(') VALUES');
+  // フィールド名は 1 行にまとめて出力する（1 列 1 行にはしない）。
+  const columnList = ordered.map((p) => ident(p.target, 'postgres', quote)).join(', ');
+  const columnBlock = [`INSERT INTO ${tableName} (${columnList}) VALUES`];
 
   let tuples = [];
   if (kind === 'template') {
