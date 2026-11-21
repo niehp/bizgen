@@ -1,0 +1,40 @@
+package com.walk_nie.bizgen.agent.generator.java;
+
+import com.walk_nie.bizgen.agent.pipeline.Pipeline;
+import com.walk_nie.bizgen.agent.pipeline.PipelineContext;
+import com.walk_nie.bizgen.agent.pipeline.stage.ClassifyIntentStage;
+import com.walk_nie.bizgen.agent.pipeline.stage.GenerateJavaDraftStage;
+import com.walk_nie.bizgen.agent.pipeline.stage.LoadDesignStage;
+import com.walk_nie.bizgen.agent.pipeline.stage.LoadFeatureStage;
+import com.walk_nie.bizgen.agent.pipeline.stage.PolishJavaStage;
+import com.walk_nie.bizgen.agent.pipeline.stage.ResolveVariablesStage;
+import com.walk_nie.bizgen.agent.pipeline.stage.SearchExistingCodeStage;
+import com.walk_nie.bizgen.agent.pipeline.stage.SemanticMapStage;
+import com.walk_nie.bizgen.agent.pipeline.stage.ValidateWriteStage;
+
+/** Java 生成パイプラインの組み立て。ステージ順はここで固定する。 */
+public final class JavaGenPipeline {
+
+    private final Pipeline pipeline;
+
+    public JavaGenPipeline() {
+        this.pipeline = new Pipeline("java-gen")
+                .add(new LoadFeatureStage())
+                .add(new LoadDesignStage())
+                .add(new ResolveVariablesStage())
+                .add(new ClassifyIntentStage())
+                .add(new SemanticMapStage())
+                .add(new SearchExistingCodeStage())
+                .add(new GenerateJavaDraftStage())
+                .add(new PolishJavaStage())
+                .add(new ValidateWriteStage());
+    }
+
+    public JavaGenState run(String featureName, PipelineContext context) {
+        return pipeline.run(new JavaGenState(featureName), context);
+    }
+
+    public Pipeline pipeline() {
+        return pipeline;
+    }
+}

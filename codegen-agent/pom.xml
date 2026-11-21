@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.walk_nie.bizgen</groupId>
+  <artifactId>bizgen-agent</artifactId>
+  <version>0.1.0</version>
+  <packaging>jar</packaging>
+
+  <name>bizgen-agent</name>
+  <description>ローカル LLM を用いた、决定论的なオーケストレーション基地の Java コード/SQL 生成エージェント</description>
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <maven.compiler.source>1.8</maven.compiler.source>
+    <maven.compiler.target>1.8</maven.compiler.target>
+  </properties>
+
+  <!-- 外部依存を意図的に持たない。オフライン／閉域環境でもビルド可能にするため。 -->
+  <dependencies>
+  </dependencies>
+
+  <build>
+    <finalName>bizgen-agent</finalName>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <version>3.2.0</version>
+        <configuration>
+          <archive>
+            <manifest>
+              <mainClass>com.walk_nie.bizgen.agent.AgentApplication</mainClass>
+            </manifest>
+          </archive>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

@@ -14,6 +14,7 @@
 - **变量 6 种命名风格**（`mdgen/CaseVars`，与 `template-studio/shared/casevars.js` 同语义）：`{{keyUpper}}` 首字母大写 / `{{keyLower}}` 首字母小写 / `{{keyPascal}}` 大驼峰 / `{{keyCamel}}` 小驼峰 / `{{keyUpperSnake}}` 大蛇形 / `{{keySnake}}` 小蛇形。长后缀优先判定；`application_id` ⇔ `applicationId` 按 camel 规范化互匹，撞多个定义报暧昧；优先级 显式定义 ＞ 后缀派生 ＞ camel 匹配 ＞ 默认值 ＞ 报错。SQL bind marker 名恒为小驼峰：`{{application_id}}` → `/*applicationId*/'...'`，值仍按原参照名解析。
 
 ## 架构选型约定（2026-11-20 确立）
+- **功能 md 主链路（2026-11-21 确立，推荐）**：`CodegenFromFunctionMd` 以功能 md 为主输入，功能 md 用 `## 変数` 定义变量、`## 参照設計` 显式列出设计 md 路径（只加载清单内文件，非全量扫描）、重复 `## メソッド` 驱动多个方法组装进同一类。解析=`FunctionSpecParser`，清单加载=`LayeredSpecLoader.loadContexts`，多方法组装=`SourceAssembler.assembleGroup`，自检=`FunctionMdDemo`。旧 `CodegenFromMd <方法.md>` 单方法全量自动扫描链路保留兼容。
 - 确定性优先：流程控制、参数校验、状态跳转 100% 由 Java 代码承担；LLM 仅作类型化叶节点（语义映射、意图分类、代码草稿、润色），不得决定路由。
 - 数据不出内网：模型本地部署，可观测与存储全部自托管，不用云端 LLM/托管 tracing。
 - 强类型单一真源：Java record 派生 JSON Schema，配合 vLLM XGrammar 约束解码保证输出结构合法；schema 扁平 ≤2 层，分类用 enum。
