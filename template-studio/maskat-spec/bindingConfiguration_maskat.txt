@@ -1,0 +1,38 @@
+
+        "#document": {
+            children: {
+                layoutDef: {}
+            }
+        },
+
+        layoutDef: {
+            type: "Layout",
+            children: {
+                layout: {},
+                javaScriptGlobal: { property: "children", repeat: true }
+            }
+        },
+        
+        layout: {
+            attributes: {
+                name: { type: "string", required: true, property: "layoutId" },
+                refParentHTML: { type: "string" },
+                fragment: { type: "boolean" }
+            },
+            children: {
+                "*": { property: "children", repeat: true }
+            }
+        },
+        
+        evaluator: {
+            type: maskat.layout.ExpressionEvaluator,
+            attributes: {
+                name: { type: "string", required: true }
+            }
+        },
+        
+        desc: {
+            children: {
+                "#text": {}
+            }
+        }

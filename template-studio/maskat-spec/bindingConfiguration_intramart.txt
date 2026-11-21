@@ -1,0 +1,1483 @@
+        {
+            accordionContainer: {
+                type:  maskat.intramart.widget.AccordionContainerWrapper,
+                extend: "dijit._Container",
+                attributes: {
+                    name: { type: "string", required: true },
+                    top: { type: "length", required: true },
+                    left: { type: "length", required: true },
+                    width: { type: "length", defaultValue: "100%" },
+                    height: { type: "length", defaultValue: "100%" },
+                    title: { type: "string", defaultValue: "" },
+                    duration: { type: "number", defaultValue: 250 },
+                    cssStyle: { type: "string", defaultValue: "" },
+                    cssClass: { type: "string", defaultValue: "" },
+                    contextMenu: { type: "string" },
+                    tooltip: { type: "string" }
+                },
+                children: {
+                    accordionPane: { property: "children", repeat: true },
+                    contentPane: { property: "children", repeat: true }
+                }
+            },
+
+            accordionPane: {
+                type:  maskat.intramart.widget.ContentPaneWrapper,
+                attributes: {
+                    name: { type: "string", required: true },
+                    title: { type: "string", required: true },
+                    errorMessage: { type: "string" },
+                    extractContent: { type: "boolean", defaultValue: false },
+                    href: { type: "string" },
+                    isLoaded: { type: "boolean" },
+                    loadingMessage: { type: "string" },
+                    parseOnLoad: { type: "boolean", defaultValue: true },
+                    preload: { type: "boolean", defaultValue: false },
+                    preventCache: { type: "boolean", defaultValue: false },
+                    refreshOnShow: { type: "boolean", defaultValue: false },
+                    closable: { type: "boolean", defaultValue: false },
+                    selected: { type: "boolean", defaultValue: false },
+                    cssStyle: { type: "string", defaultValue:""},
+                    cssClass: { type: "string", defaultValue:""},
+                    contextMenu: { type: "string" },
+                    tooltip: { type: "string" }
+                },
+                children: {
+                    "*": { property: "children", repeat: true }
+                }
+            },
+
+            gridContentPane: {
+                type:  maskat.intramart.widget.GridContentPaneWrapper,
+                attributes: {
+                    name: { type: "string", required: true },
+                    top: { type: "length", defaultValue: "0px" },
+                    left: { type: "length", defaultValue: "0px" },
+                    width: { type: "length" },
+                    height: { type: "length" },
+                    title: { type: "string", defaultValue: "no title" },
+                    errorMessage: { type: "string" },
+                    extractContent: { type: "boolean", defaultValue: false },
+                    href: { type: "string" },
+                    isLoaded: { type: "boolean" },
+                    loadingMessage: { type: "string" },
+                    parseOnLoad: { type: "boolean", defaultValue: true },
+                    refreshOnShow: { type: "boolean", defaultValue: false },
+                    closable: { type: "boolean", defaultValue: false },
+                    selected: { type: "boolean", defaultValue: false },
+                    layoutAlign: { type: "enum",
+                                   values: [ "top", "left", "right", "bottom", "client", "none" ],
+                                   defaultValue: "none" },
+                    cssStyle: { type: "string", defaultValue:"" },
+                    cssClass: { type: "string", defaultValue:"" },
+                    sizeShare: { type: "number", defaultValue: 10 },
+                    sizeMin: { type: "number", defaultValue: 10 },
+                    contextMenu: { type: "string" },
+                    tooltip: { type: "string" },
+                    titleFlg: { type: "boolean", defaultValue: false },
+                    preload: { type: "boolean", defaultValue: false },
+                    dragFlg: { type: "boolean", defaultValue: false },
+                    resizeSingleChild: { type: "boolean", defaultValue: false },
+                    titleBgColor: { type: "string", defaultValue: maskat.intramart.core.Constants.GRIDCONTENTPANE_TITLEBGCOLOR },
+                    titleColor: { type: "string", defaultValue: maskat.intramart.core.Constants.GRIDCONTENTPANE_TITLECOLOR }
+                },
+                children: {
+                    "*": { property: "children", repeat: true }
+                }
+            },
+
+            button: {
+                type: maskat.intramart.widget.ButtonWrapper,
+                attributes: {
+                    name: { type: "string", required: true },
+                    top: { type: "length" },
+                    left: { type: "length", required: true },
+                    width: { type: "length" },
+                    height: { type: "length" },
+                    label: { type: "string", defaultValue:""},
+                    showLabel: { type: "boolean", defaultValue: true },
+                    iconClass: { type: "string" },
+                    disabled: {type: "boolean", defaultValue: false },
+                    tabIndex: { type: "number", defaultValue: 0 },
+                    cssStyle: { type: "string", defaultValue: ""},
+                    cssClass: { type: "string", defaultValue:""},
+                    contextMenu: { type: "string" },
+                    title: { type: "string", defaultValue:""},
+                    readOnly: { type: "boolean", defaultValue: false },
+                    tooltip: { type: "string" },
+                    type: { type: "string", defaultValue: "button" },
+                    optionsTitle: { type: "string", defaultValue:""},
+                    keyCode: { type: "number" },
+                    hiddenButtonKeyBind: { type: "boolean", defaultValue: false },
+                    labelFormatter: { type: "function",
+                        defaultValue: "maskat.intramart.widget.ButtonWrapper.defaultLabelFormatter" }
+
+                }
+            },
+
+            hiddenButton: {
+                type: maskat.intramart.widget.HiddenButtonWrapper,
+                attributes: {
+                    name: { type: "string", required: true },
+                    top: { type: "length", defaultValue: "0px" },
+                    left: { type: "length", defaultValue: "0px" },
+                    label: { type: "string", defaultValue:"" },
+                    showLabel: { type: "boolean", defaultValue: true },
+                    iconClass: { type: "string" },
+                    disabled: {type: "boolean", defaultValue: false },
+                    tabIndex: { type: "number", defaultValue: 0 },
+                    cssStyle: { type: "string", defaultValue: maskat.intramart.core.Constants.HIDDENBUTTON_STYLE },
+                    cssClass: { type: "string", defaultValue:""},
+                    contextMenu: { type: "string" },
+                    title: { type: "string", defaultValue:""},
+                    readOnly: { type: "boolean", defaultValue: false },
+                    tooltip: { type: "string" },
+                    type: { type: "string", defaultValue: "button" },
+                    optionsTitle: { type: "string", defaultValue:""},
+                    keyCode: { type: "number" },
+                    hiddenButtonKeyBind: { type: "boolean", defaultValue: false }
+                }
+            },
+
+            iconButton: {
+                type: maskat.intramart.widget.IconButtonWrapper,
+                attributes: {
+                    name: { type: "string", required: true },
+                    top: { type: "length" },
+                    left: { type: "length", required: true },
+                    width: { type: "length" },
+                    height: { type: "length" },
+                    label: { type: "string", defaultValue:""},
+                    showLabel: { type: "boolean", defaultValue: false },
+                    iconClass: { type: "enum",
+                                 values: [
+                                    "btnIcon bizBtnIconBeforeBlack",
+                                    "btnIcon bizBtnIconBizOrganization",
+                                    "btnIcon bizBtnIconBizOrganizationGroup",
+                                    "btnIcon bizBtnIconBlack",
+                                    "btnIcon bizBtnIconDetail",
+                                    "btnIcon bizBtnIconDisplaySaved",
+                                    "btnIcon bizBtnIconEntry",
+                                    "btnIcon bizBtnIconHaveChild",
+                                    "btnIcon bizBtnIconNotHaveChild",
+                                    "btnIcon bizBtnIconNotPostable",
+                                    "btnIcon bizBtnIconPostable",
+                                    "btnIcon bizBtnIconRed",
+                                    "btnIcon bizBtnIconReference",
+                                    "btnIcon bizBtnIconArrowUp",
+                                    "btnIcon bizBtnIconArrowDown",
+                                    "btnIcon bizIconGridOrganization",
+                                    "btnIcon btnIconActive",
+                                    "btnIcon btnIconAllowance",
+                                    "btnIcon btnIconArrowLeft",
+                                    "btnIcon btnIconArrowRight",
+                                    "btnIcon btnIconArrowDown",
+                                    "btnIcon btnIconArrowUp",
+                                    "btnIcon btnIconAttachfile",
+                                    "btnIcon btnIconBlanketDeliberation",
+                                    "btnIcon btnIconCalendar",
+                                    "btnIcon btnIconCharge",
+                                    "btnIcon btnIconClear",
+                                    "btnIcon btnIconClose",
+                                    "btnIcon btnIconComplete",
+                                    "btnIcon btnIconCopy",
+                                    "btnIcon btnIconDelete",
+                                    "btnIcon btnIconEdit",
+                                    "btnIcon btnIconFlow",
+                                    "btnIcon btnIconGridActive",
+                                    "btnIcon btnIconGridApproval",
+                                    "btnIcon btnIconGridBeforeBlack",
+                                    "btnIcon btnIconGridCopy",
+                                    "btnIcon btnIconGridDelete",
+                                    "btnIcon btnIconGridDeleteslip",
+                                    "btnIcon btnIconGridDetail",
+                                    "btnIcon btnIconGridInitialdisplay",
+                                    "btnIcon btnIconGridOrganizationGroup",
+                                    "btnIcon btnIconGridOutputfile",
+                                    "btnIcon btnIconGridRed",
+                                    "btnIcon btnIconGridReference",
+                                    "btnIcon btnIconGridRefresh",
+                                    "btnIcon btnIconGridSelect",
+                                    "btnIcon btnIconHelp",
+                                    "btnIcon btnIconHelp", 
+                                    "btnIcon btnIconInfo",
+                                    "btnIcon btnIconLargeAttachfile",
+                                    "btnIcon btnIconLargeApprovalIn",
+                                    "btnIcon btnIconLargeApproved",
+                                    "btnIcon btnIconLargeBeforeBlack",
+                                    "btnIcon btnIconLargeBlack",
+                                    "btnIcon btnIconLargeReapplication",
+                                    "btnIcon btnIconLargeRed",
+                                    "btnIcon btnIconLargeUnclaimed",
+                                    "btnIcon btnIconList",
+                                    "btnIcon btnIconNew",
+                                    "btnIcon btnIconNext",
+                                    "btnIcon btnIconNextDown",
+                                    "btnIcon btnIconNextUp",
+                                    "btnIcon btnIconPatternSelect",
+                                    "btnIcon btnIconPrevious",
+                                    "btnIcon btnIconPrint",
+                                    "btnIcon btnIconRefresh",
+                                    "btnIcon btnIconRowAdd",
+                                    "btnIcon btnIconRowConfirm",
+                                    "btnIcon btnIconRowDelete",
+                                    "btnIcon btnIconRowPaste",
+                                    "btnIcon btnIconSave",
+                                    "btnIcon btnIconSearch",
+                                    "btnIcon btnIconSerial",
+                                    "btnIcon btnIconShelf",
+                                    "btnIcon btnIconSpare",
+                                    "btnIcon btnIconStock",
+                                    "btnIcon btnIconTitle",
+                                    "btnIcon btnIconTrade",
+                                    "customIconClass"
+                                 ],
+                                 defaultValue: "btnIcon btnIconNew" },
+                    disabled: {type: "boolean", defaultValue: false },
+                    tabIndex: { type: "number", defaultValue: 0 },
+                    cssStyle: { type: "string", defaultValue: maskat.intramart.core.Constants.ICONBUTTON_STYLE },
+                    cssClass: { type: "string", defaultValue:"intramartIconButton"},
+                    contextMenu: { type: "string" },
+                    title: { type: "string", defaultValue:""},
+                    readOnly: { type: "boolean", defaultValue: false },
+                    tooltip: { type: "string" },
+                    type: { type: "string", defaultValue: "button" },
+                    optionsTitle: { type: "string", defaultValue:""},
+                    keyCode: { type: "number" },
+                    hiddenButtonKeyBind: { type: "boolean", defaultValue: false },
+                    customIconClass: { type: "string", defaultValue:""},
+                    labelFormatter: { type: "function",
+                        defaultValue: "maskat.intramart.widget.ButtonWrapper.defaultLabelFormatter" }
+                }
+            },
+
+            calendar: {
+                type:  maskat.intramart.widget.CalendarWrapper,
+                attributes: {
+                    name: { type: "string", required: true },
+                    top: { type: "length", required: true },
+                    left: { type: "length", required: true },
+                    width: { type: "length", defaultValue: "100%" },
+                    editable: { type: "boolean", defaultValue: true },
+                    weekends: { type: "boolean", defaultValue: true },
+                    theme: { type: "boolean", defaultValue: true },
+                    tabIndex: { type: "number", defaultValue: -1 }
+                }
+            },
+   
+            checkBox: {
+                type: maskat.intramart.widget.CheckBoxWrapper,
+                attributes: {
+                    top: { type: "length", required: true },
+                    left: { type: "length", required: true },
+                    name: { type: "string", required: true },
+                    tooltip: { type: "string" },
+                    contextMenu: { type: "string" },
+                    cssStyle: { type: "string", defaultValue:"" },
+                    cssClass: { type: "string", defaultValue:"" },
+                    checked: { type: "boolean", defaultValue: false },
+                    value: { type: "string", defaultValue: "on" },
+                    label: { type: "string", defaultValue: "" },
+                    disabled: {type: "boolean", defaultValue: false },
+                    readOnly: {type: "boolean", defaultValue: false },
+                    intermediateChanges: {type: "boolean", defaultValue: false },
+                    tabIndex: { type: "number", defaultValue: 0 },
+                    funcOnLeave: { type: "function", property: "leave"},
+                    funcOnPrevious: { type: "function", property: "previous"}
+                }
+            },
+
+            contentPane: {
+                type:  maskat.intramart.widget.ContentPaneWrapper,
+                attributes: {
+                    name: { type: "string", required: true },
+                    top: { type: "length", defaultValue: "0px" },
+                    left: { type: "length", defaultValue: "0px" },
+                    width: { type: "length" },
+                    height: { type: "length" },
+                    title: { type: "string", defaultValue: "no title" },
+                    errorMessage: { type: "string" },
+                    extractContent: { type: "boolean", defaultValue: false },
+                    href: { type: "string" },
+                    isLoaded: { type: "boolean" },
+                    loadingMessage: { type: "string" },
+                    parseOnLoad: { type: "boolean", defaultValue: true },
+                    refreshOnShow: { type: "boolean", defaultValue: false },
+                    closable: { type: "boolean", defaultValue: false },
+                    selected: { type: "boolean", defaultValue: false },
+                    layoutAlign: { type: "enum",
+                                   values: [ "top", "left", "right", "bottom", "client", "none" ],
+                                   defaultValue: "none" },
+                    cssStyle: { type: "string", defaultValue:""},
+                    cssClass: { type: "string", defaultValue:""},
+                    sizeShare: { type: "number", defaultValue: 10 },
+                    sizeMin: { type: "number", defaultValue: 10 },
+                    contextMenu: { type: "string" },
+                    tooltip: { type: "string" },
+                    titleFlg: { type: "boolean", defaultValue: false },
+                    preload: { type: "boolean", defaultValue: false },
+                    dragFlg: { type: "boolean", defaultValue: false },
+                    resizeSingleChild: { type: "boolean", defaultValue: false },
+                    titleBgColor: { type: "string", defaultValue: maskat.intramart.core.Constants.CONTENTPANE_TITLEBGCOLOR },
+                    titleColor: { type: "string", defaultValue: maskat.intramart.core.Constants.CONTENTPANE_TITLECOLOR }
+                },
+                children: {
+                    "*": { property: "children", repeat: true }
+                }
+            },
+
+            dialog: {
+                type:  maskat.intramart.widget.DialogWrapper,
+                attributes: {
+                    title: { type: "string", defaultValue: "no title" },
+                    name: { type: "string", required: true },
+                    width: { type: "length", defaultValue: "100%" },
+                    height: { type: "length", defaultValue: "100%" },
+                    tooltip: { type: "string" },
+                    contextMenu: { type: "string" },
+                    errorMessage: { type: "string" },
+                    extractContent: { type: "boolean"},
+                    href: { type: "string" },
+                    isLoaded: { type: "boolean" },
+                    loadingMessage: { type: "string" },
+                    parseOnLoad: { type: "boolean", defaultValue: true },
+                    preload: { type: "boolean", defaultValue: false },
+                    preventCache: { type: "boolean", defaultValue: false },
+                    refreshOnShow: { type: "boolean", defaultValue: false },
+                    duration: { type: "number", defaultValue: 50 },
+                    execute: { type: "function" },
+                    cssStyle: { type: "string", defaultValue:""},
+                    cssClass: { type: "string", defaultValue:""},
+                    hideCloseButton: { type: "boolean", defaultValue: true },
+                    autofocus: { type: "boolean", defaultValue: true },
+                    draggable: { type: "boolean", defaultValue: true },
+                    handleCloseButtonEvent: { type: "boolean", defaultValue: false },
+                    killEscapeKeyEvent: { type: "boolean", defaultValue: false },
+                    refocus: { type: "boolean", defaultValue: false},
+                    fadeOut: { type: "boolean", defaultValue: false}
+                },
+                children: {
+                    "*": { property: "children", repeat: true }
+                }
+            },
+
+            fileUpload: {
+                type:  maskat.intramart.widget.FileUploadWrapper,
+                attributes: {
+                    name: { type: "string", required: true },
+                    top: { type: "length", required: true },
+                    left: { type: "length", required: true },
+                    width: { type: "length", defaultValue: "100px" },
+                    action: { type: "string" },
+                    tabIndex: { type: "number", defaultValue: -1 }
+                },
+                children: {
+                    hidden: { property: "children", repeat: true }
+                }
+            },
+
+            hidden: {
+                attributes: {
+                    key: { type: "string", required: true, defaultValue: "key" },
+                    value: { type: "string", defaultValue: "" }
+                }
+            },
+
+            filteringSelect: {
+                type: maskat.intramart.widget.FilteringSelectWrapper,
+                attributes: {
+                    name: { type: "string", required: true },
+                    top: { type: "length", required: true },
+                    left: { type: "length", required: true },
+                    value: { type: "string", defaultValue: "" },
+                    width: {type: "length" },
+                    height: { type: "length" },
+                    lowercase: {type: "boolean"},
+                    maxlength: { type: "number", defaultValue: Infinity },
+                    propercase: {type: "boolean"},
+                    trim: {type: "boolean"},
+                    uppercase: {type: "boolean"},
+                    autoComplete: { type: "boolean" },
+                    hasDownArrow: {type: "boolean", defaultValue: true },
+                    ignoreCase: {type: "boolean"},
+                    labelAttr: { type: "string" },
+                    labelType: { type: "string", defaultValue: "text" },
+                    pageSize: {type: "number", defaultValue: 32767 },
+                    query: { type: "json", defaultValue: "{}"},
+                    searchAttr: { type: "string", defaultValue: "name" },
+                    searchDelay: { type: "number" },
+                    constraints: { type: "string"},
+                    invalidMessage: { type: "string"},
+                    promptMessage: {type: "string"},
+                    rangeMessage: {type: "string"},
+                    required: {type: "boolean"},
+                    store: { type: "string" },
+                    intermediateChanges: {type: "boolean", defaultValue: false },
+                    readOnly: {type: "boolean", defaultValue: false },
+                    disabled: {type: "boolean", defaultValue: false },
+                    tabIndex: { type: "number", defaultValue: 0 },
+                    cssStyle: { type: "string", defaultValue:""},
+                    cssClass: { type: "string", defaultValue:""},
+                    contextMenu: { type: "string" },
+                    tooltip: { type: "string" },
+                    identifier: { type: "string", defaultValue: "value" },
+                    tooltipPosition: { type: "Array" },
+                    queryExpr: { type: "string", defaultValue: "${0}*" },
+                    fetchProperties: { type: "json", defaultValue: "{}" },
+                    executeOnChange: {type: "boolean", defaultValue: false },
+                    validate: {type: "boolean", defaultValue: false },
+                    funcOnLeave: { type: "function", property: "leave"},
+                    funcOnPrevious: { type: "function", property: "previous"}
+                },
+                children: {
+                    filteringSelectItem: { property: "items", repeat: true },
+                    xmlStore: { property: "storeWrapper", repeat: false },
+                    csvStore: { property: "storeWrapper", repeat: false },
+                    opmlStore: { property: "storeWrapper", repeat: false },
+                    htmlTableStore: { property: "storeWrapper", repeat: false },
+                    itemFileReadStore: { property: "storeWrapper", repeat: false },
+                    itemFileWriteStore: { property: "storeWrapper", repeat: false }
+                }
+            },
+
+            /* 入力補助 */
+            suggestFilteringSelect: {
+                type: maskat.intramart.widget.SuggestFilteringSelectWrapper,
+                attributes: {
+                    name: { type: "string", required: true },
+                    top: { type: "length", required: true },
+                    left: { type: "length", required: true },
+                    value: { type: "string", defaultValue: "" },
+                    width: {type: "length" },
+                    height: { type: "length" },
+                    lowercase: {type: "boolean"},
+                    maxlength: { type: "number", defaultValue: Infinity },
+                    propercase: {type: "boolean"},
+                    trim: {type: "boolean"},
+                    uppercase: {type: "boolean"},
+                    autoComplete: { type: "boolean" },
+                    hasDownArrow: {type: "boolean", defaultValue: false },
+                    ignoreCase: {type: "boolean"},
+                    labelAttr: { type: "string" },
+                    labelType: { type: "string", defaultValue: "text" },
+                    pageSize: {type: "number", defaultValue: 32767 },
+                    query: { type: "json", defaultValue: "{}"},
+                    searchAttr: { type: "string", defaultValue: "name" },
+                    searchDelay: { type: "number" },
+                    constraints: { type: "string"},
+                    invalidMessage: { type: "string"},
+                    promptMessage: {type: "string"},
+                    rangeMessage: {type: "string"},
+                    required: {type: "boolean"},
+                    store: { type: "string" },
+                    intermediateChanges: {type: "boolean", defaultValue: false },
+                    readOnly: {type: "boolean", defaultValue: false },
+                    disabled: {type: "boolean", defaultValue: false },
+                    tabIndex: { type: "number", defaultValue: 0 },
+                    cssStyle: { type: "string", defaultValue:""},
+                    cssClass: { type: "string", defaultValue:""},
+                    contextMenu: { type: "string" },
+                    tooltip: { type: "string" },
+                    identifier: { type: "string", defaultValue: "value" },
+                    tooltipPosition: { type: "Array" },
+                    queryExpr: { type: "string", defaultValue: "${0}*" },
+                    fetchProperties: { type: "json", defaultValue: "{}" },
+                    executeOnChange: {type: "boolean", defaultValue: false },
+                    validate: {type: "boolean", defaultValue: false },
+                    funcOnLeave: { type: "function", property: "leave"},
+                    funcOnPrevious: { type: "function", property: "previous"},
+                    imeMode:{type: "enum",
+                          values: [ "auto", "active", "inactive", "disabled"],
+                          defaultValue: "auto"}
+                },
+                children: {
+                    filteringSelectItem: { property: "items", repeat: true },
+                    xmlStore: { property: "storeWrapper", repeat: false },
+                    csvStore: { property: "storeWrapper", repeat: false },
+                    opmlStore: { property: "storeWrapper", repeat: false },
+                    htmlTableStore: { property: "storeWrapper", repeat: false },
+                    itemFileReadStore: { property: "storeWrapper", repeat: false },
+                    itemFileWriteStore: { property: "storeWrapper", repeat: false }
+                }
+            },
+
+            /* グリッド */
+            grid: {
+                type: maskat.intramart.widget.GridWrapper,
+                attributes: {
+                    name: { type: "string", required: true},
+                    top: { type: "length", required: true },
+                    left: { type: "length", required: true },
+                    width: { type: "length" },
+                    height: { type: "length" },
+                    cssStyle: { type: "string", defaultValue:"" },
+                    autoHeight: { type: "boolean", defaultValue: false },
+                    autoRender: { type: "boolean", defaultValue: true },
+                    autoWidth: { type: "boolean", defaultValue: false },
+                    defaultHeight: { type: "length", defaultValue: "15em" },
+                    defaultWidth: {type: "length"},
+                    elasticView: { type: "number", defaultValue: -1 },
+                    fastScroll: { type: "boolean", defaultValue: true },
+                    keepRows: { type: "number", defaultValue: 75 },
+                    rowCount: { type: "number", defaultValue: 5 },
+                    rowsPerPage: { type: "number", defaultValue: 25 },
+                    singleClickEdit: { type: "boolean", defaultValue: false },
+                    headerDndFlg: { type: "boolean", defaultValue: false },
+                    rowDndFlg: { type: "boolean", defaultValue: false },
+                    onRowDndStart: { type: "function" },
+                    onRowDndCancel: { type: "function" },
+                    onRowDndDrop: { type: "function" },
+                    onRowDndSourceOver: { type: "function" },
+                    onHeaderDndStart: { type: "function" },
+                    onHeaderDndCancel: { type: "function" },
+                    onHeaderDndDrop: { type: "function" },
+                    onHeaderDndSourceOver: { type: "function" },
+                    'cssClass': { type: "string" },
+                    /* ここから1.3のDataGridの属性 */ 
+                    selectionMode: { type: "enum",
+                                     values:[ "extended", "single", "multiple"],
+                                     defaultValue: "single"},
+                    selectable: { type: "boolean", defaultValue: true },
+                    store: { type: "string" },
+                    query: { type: "json" },
+                    queryOptions: { type: "json" },
+                    clientSort: { type: "boolean",  defaultValue: false},
+                    remoteSort: { type: "boolean", defaultValue: true },
+                    tabIndex: { type: "number", defaultValue: 0 },
+                    onCellContextMenuKeyCode: { type: "number" }
+                },
+                children: {
+                    structure: { property: "structure" },
+                    model: { property: "model" }
+                }
+            },
+
+            structure: {
+                children: {
+                    view: { property: "view", repeat: true }
+                }
+            },
+
+            view: {
+                attributes: {
+                    noscroll: {type: "boolean"},
+                    width: {type: "length"},/* 本来のDataGridのセルの仕様では、数値のみをemとして扱いますが、互換性のためにlength型(数値のみはpx)に変更してあります */
+                    type: {type: "string"},
+                    onBeforeRow: {type: "function"},
+                    onAfterRow: {type: "function"},
+                    rowPad: {type: "length"},       /* @deprecated */
+                    defaultWidth: {type: "length"}, /* @deprecated */
+                    autoWidth: { type: "boolean" , defaultValue: false}
+                },
+                children: {
+                    row: { property: "cells", repeat: true , value:"cell"}
+                }
+            },
+
+            row: {
+                children: {
+                  iconCell: { property: "cell", repeat: true},
+                  cell: { property: "cell", repeat: true},
+                  sanitizeCell: { property: "cell", repeat: true}
+                }
+            },
+
+            cell: {
+                attributes: {
+                    noresize: { type: "boolean" },
+                    value: { type: "string" },          
+                    name: {type: "string" },
+                    field: {type: "string", defaultValue: "fieldId" },
+                    defaultValue: {type: "string", defaultValue: ""},//new 1.3
+                    type: {type: "string" },//new 1.3
+                    editable: {type: "boolean" },//new 1.3
+                    formatter: {type: "function" },
+                    hidden: {type: "boolean" },//new 1.3
+                    width: {type: "length" },/* 本来のDataGridのセルの仕様では、数値のみをemとして扱いますが、互換性のためにlength型(数値のみはpx)に変更してあります */
+                    height: {type: "length" },
+                    colSpan: {type: "number", defaultValue: 1 },
+                    rowSpan: {type: "number", defaultValue: 1 },
+                    styles: {type: "string" },/*必ず;で終わること*/
+                    headerStyles: {type: "string" },
+                    cellStyles: {type: "string" },
+                    classes: {type: "string" },
+                    headerClasses: { type: "string" },
+                    cellClasses: { type: "string" },
+                    attrs: {type: "string" },//new 1.3
+                    sorter: { type: "function" },//new ソーター対応
+                    alwaysEditing: { type: "boolean" },
+                    sortable: { type: "boolean", defaultValue: true }
+                },
+                children: {
+                    editor: {
+                        property: "widget"
+                    },
+                    option: { 
+                        property: "options",
+                        repeat: true
+                    }
+                }
+            },
+
+            editor: {
+                attributes: {
+                    type: { property: "edName", type: "string" },
+                    currency: { property: "currency", type: "string" },
+                    formatCurrency: { property: "formatLength", type: "string"},
+                    selector: { property: "selector", type: "string"}
+                }
+            },
+
+            option: {
+                attributes: {
+                    name: { property: "name", type: "string" },
+                    value: { property: "value", type: "string" }
+                }
+            },
+
+            model: {
+                attributes: {
+//                    clientSort: { type: "boolean", defaultValue: true },
+                    query: { type: "string" },
+                    rowsPerPage: { type: "number", defaultValue: 100 },
+                    store: { type: "string" },
+                    identifier: { type: "string" }
+                },
+                children: {
+                    xmlStore: { property: "storeWrapper", repeat: false },
+                    csvStore: { property: "storeWrapper", repeat: false },
+                    opmlStore: { property: "storeWrapper", repeat: false },
+                    htmlTableStore: { property: "storeWrapper", repeat: false },
+                    itemFileReadStore: { property: "storeWrapper", repeat: false },
+                    itemFileWriteStore: { property: "storeWrapper", repeat: false }
+                }
+            },
+            /* end グリッド */
+
+            itemFileWriteStore: {
+                type:  maskat.intramart.widget.ItemFileWriteStoreWrapper,
+                attributes: {
+                    name: { type: "string" },
+                    url: { type: "string" },
+                    identifier: { type: "string" },
+                    label: { type: "string" },
+                    urlPreventCache: { type:"boolean", defaultValue: false },
+                    referenceIntegrity: { type: "boolean", defaultValue: true },
+                    _saveEverything: { type: "function" }
+                },
+                children: {
+                    typeMap: { property:"typeMaps", repeat: true },
+                    item: { property: "items", repeat: true },
+                    comparatorMap: { property: "comparatorMaps", repeat: true }
+                }
+            },
+
+            typeMap: {
+                attributes: {
+                    type: { type: "string", required: true },
+                    attribute: {type: "string", requierd: true },
+                    deserialize: { type: "function", required: true },
+                    serialize: { type: "function", required: true }
+                }
+            },
+
+            item: {
+                attributes: {
+                    "*": { type: "string" }
+                }
+            },
+
+            comparatorMap: {
+                attributes: {
+                    field: { type: "string", required: true },
+                    comparator: { type: "function", required: true }
+                }
+            },
+
+            label: {
+                type: maskat.intramart.widget.LabelWrapper,
+                attributes: {
+                    name: { type: "string", required: true },
+                    top: { type: "length", required: true },
+                    left: { type: "length", required: true },
+                    width: { type: "length" },
+                    height: { type: "length" },
+                    cssStyle: { type: "string", defaultValue:""},
+                    cssClass: { type: "string", defaultValue:""},
+                    text: { type: "string", required: true },
+                    required: { type: "boolean", defaultValue: false }
+                }
+            },
+
+            pager: {
+                type: maskat.intramart.widget.PagerWrapper,
+                attributes: {
+                    top: { type: "length", required: true },
+                    left: { type: "length", required: true },
+                    name: { type: "string", required: true },
+                    width: { type: "length" },
+                    height: { type: "length" },
+                    limit: { type: "number", defaultValue:10 },
+                    grid: { type: "string", required: true }
+                }
+            },
+
+            radioButton: {
+                type: maskat.intramart.widget.RadioButtonWrapper,
+                attributes: {
+                    top: { type: "length", required: true },
+                    left: { type: "length", required: true },
+                    name: { type: "string", required: true },
+                    tooltip: { type: "string" },
+                    contextMenu: { type: "string" },
+                    cssStyle: { type: "string", defaultValue:""},
+                    cssClass: { type: "string", defaultValue:""},
+                    group: { type: "string", required: true },
+                    checked: { type: "boolean", defaultValue: false },
+                    value: {type: "string", defaultValue: "on" },
+                    label: {type: "string"},
+                    disabled: {type: "boolean", defaultValue: false },
+                    readOnly: {type: "boolean", defaultValue: false },
+                    intermediateChanges: {type: "boolean", defaultValue: false },
+                    tabIndex: { type: "number", defaultValue: 0 },
+                    funcOnLeave: { type: "function", property: "leave"},
+                    funcOnPrevious: { type: "function", property: "previous"}
+                }
+            },
+
+            sanitizeCell: {
+                attributes: {
+                    noresize: { type: "boolean" },
+                    value: { type: "string" },
+                    name: {type: "string" },
+                    field: {type: "string", defaultValue: "fieldId"},
+                    defaultValue: {type: "string", defaultValue: "" },//new 1.3
+                    type: {type: "string" },//new 1.3
+                    editable: {type: "boolean" },//new 1.3
+                    hidden: {type: "boolean" },//new 1.3
+                    width: {type: "length" },/* 本来のDataGridのセルの仕様では、数値のみをemとして扱いますが、互換性のためにlength型(数値のみはpx)に変更してあります */
+                    height: {type: "length" },
+                    colSpan: {type: "number", defaultValue: 1 },
+                    rowSpan: {type: "number", defaultValue: 1 },
+                    styles: {type: "string" },/*必ず;で終わること*/
+                    headerStyles: {type: "string" },
+                    cellStyles: {type: "string" },
+                    classes: {type: "string" },
+                    headerClasses: { type: "string" },
+                    cellClasses: { type: "string" },
+                    attrs: {type: "string" },//new 1.3
+                    sorter: { type: "function" },//new ソーター対応
+                    alwaysEditing: { type: "boolean" },
+                    sortable: { type: "boolean", defaultValue: true },
+                    formatter: { type: "function", defaultValue:"maskat.intramart.widget.GridWrapper.dataEscape" },
+                    decimalField: { type: "string" }
+                },
+                children: {
+                    editor: {
+                        property: "widget"
+                    },
+                    option: { 
+                        property: "options",
+                        repeat: true
+                    }
+                }
+            },
+
+            iconCell: {
+                attributes: {
+                    noresize: { type: "boolean" },
+                    value: { type: "string", defaultValue: " " },
+                    name: {type: "string" },
+                    field: {type: "string", defaultValue: "fieldId"},
+                    defaultValue: {type: "string", defaultValue: ""},//new 1.3
+                    type: {type: "string"},//new 1.3
+                    editable: {type: "boolean"},//new 1.3
+                    hidden: {type: "boolean"},//new 1.3
+                    width: {type: "length"},/* 本来のDataGridのセルの仕様では、数値のみをemとして扱いますが、互換性のためにlength型(数値のみはpx)に変更してあります */
+                    height: {type: "length" },
+                    colSpan: {type: "number", defaultValue: 1 },
+                    rowSpan: {type: "number", defaultValue: 1 },
+                    styles: {type: "string"},/*必ず;で終わること*/
+                    headerStyles: {type: "string"},
+                    cellStyles: {type: "string"},
+                    classes: {type: "string"},
+                    headerClasses: { type: "string"},
+                    cellClasses: { type: "enum", 
+                        values: [ 
+                            "grdBtnIcon btnIconActive",
+                            "grdBtnIcon btnIconAllowance",
+                            "grdBtnIcon btnIconBlanketDeliberation",
+                            "grdBtnIcon btnIconClose",
+                            "grdBtnIcon btnIconComplete",
+                            "grdBtnIcon btnIconCopy",
+                            "grdBtnIcon btnIconCharge",
+                            "grdBtnIcon btnIconDelete",
+                            "grdBtnIcon btnIconEdit",
+                            "grdBtnIcon btnIconFlow",
+                            "grdBtnIcon btnIconHelp",
+                            "grdBtnIcon btnIconInfo",
+                            "grdBtnIcon btnIconList",
+                            "grdBtnIcon btnIconNew",
+                            "grdBtnIcon btnIconNext",
+                            "grdBtnIcon btnIconNextDown",
+                            "grdBtnIcon btnIconNextUp",
+                            "grdBtnIcon btnIconPrevious",
+                            "grdBtnIcon btnIconPrint",
+                            "grdBtnIcon btnIconRefresh",
+                            "grdBtnIcon btnIconSave",
+                            "grdBtnIcon btnIconSearch",
+                            "grdBtnIcon btnIconSerial",
+                            "grdBtnIcon btnIconShelf",
+                            "grdBtnIcon btnIconSpare",
+                            "grdBtnIcon btnIconStock",
+                            "grdBtnIcon btnIconTitle",
+                            "grdBtnIcon btnIconTrade",
+                            "grdBtnIcon bizBtnIconBizOrganization",
+                            "grdBtnIcon bizBtnIconBizOrganizationGroup",
+                            "grdBtnIcon bizBtnIconBeforeBlack",
+                            "grdBtnIcon bizBtnIconBlack",
+                            "grdBtnIcon bizBtnIconRed",
+                            "grdBtnIcon bizBtnIconPostable",
+                            "grdBtnIcon bizBtnIconNotPostable",
+                            "grdBtnIcon bizBtnIconHaveChild",
+                            "grdBtnIcon bizBtnIconNotHaveChild",
+                            "grdBtnIcon bizBtnIconDetail",
+                            "grdBtnIcon bizBtnIconDisplaySaved",
+                            "grdBtnIcon bizBtnIconEntry",
+                            "grdBtnIcon bizBtnIconReference",
+                            "btnIconGridDetail",
+                            "btnIconGridRefresh",
+                            "btnIconGridDelete",
+                            "btnIconGridReference",
+                            "btnIconGridCopy",
+                            "btnIconGridBeforeBlack",
+                            "btnIconGridRed",
+                            "btnIconGridDelete",
+                            "btnIconGridApproval",
+                            "btnIconGridOutputfile",
+                            "btnIconGridActive",
+                            "btnIconGridOrganizationGroup",
+                            "bizIconGridOrganization",
+                            "btnIconGridAllowance",
+                            "btnIconGridCharge",
+                            "btnIconGridSerial",
+                            "btnIconGridShelf",
+                            "btnIconGridSpare",
+                            "btnIconGridStock",
+                            "btnIconGridTrade"
+                          ],
+                        defaultValue:"grdBtnIcon btnIconEdit" },
+                    attrs: {type: "string"},//new 1.3
+                    sorter: { type: "function" },//new ソーター対応
+                    alwaysEditing: { type: "boolean" },
+                    sortable: { type: "boolean", defaultValue: false },
+                    formatter: { type: "function", defaultValue:"maskat.intramart.widget.GridWrapper.dataEscape" }
+                },
+                children: {
+                    editor: {
+                        property: "widget"
+                    },
+                    option: { 
+                        property: "options",
+                        repeat: true
+                    }
+                }
+            },
+
+            tabContainer: {
+                type:  maskat.intramart.widget.TabContainerWrapper,
+                extend: "dijit._Container",
+                attributes: {
+                    name: { type: "string", required: true },
+                    top: { type: "length", required: true },
+                    left: { type: "length", required: true },
+                    width: { type: "length", defaultValue: "100%" },
+                    height: { type: "length", defaultValue: "100%" },
+                    title: { type: "string", defaultValue:""},
+                    tabPosition: { type: "enum",
+                                    values: [ "top", "bottom", "left-h", "right-h"],
+                                    defaultValue: "top" },
+                    cssStyle: { type: "string", defaultValue:""},
+                    cssClass: { type: "string", defaultValue:""},
+                    contextMenu: { type: "string" },
+                    doLayout: {type: "boolean", defaultValue: true },
+                    tabStrip: { type: "boolean", defaultValue: false },
+                    nested: { type: "boolean", defaultValue: false },
+                    tooltip: { type: "string" }
+                },
+                children: {
+                    "contentPane": { property: "children", repeat: true }
+                }
+            },
+
+            textBox: {
+                type: maskat.intramart.widget.TextBoxWrapper,
+                attributes: {
+                    top: { type: "length", required: true },
+                    left: { type: "length", required: true },
+                    name: { type: "string", required: true },
+                    width: { type: "length" },
+                    height: { type: "length" },
+                    tooltip: { type: "string" },
+                    contextMenu: { type: "string" },
+                    cssStyle: { type: "string", defaultValue:""},
+                    cssClass: { type: "string", defaultValue:""},
+                    maxlength: { type: "number", required: true },
+                    value: { type: "string" },
+                    lowercase: {type: "boolean", defaultValue: false },
+                    propercase: {type: "boolean", defaultValue: false },
+                    trim: {type: "boolean", defaultValue: false },
+                    uppercase: {type: "boolean", defaultValue: false },
+                    type: { type: "enum",
+                            values: [ "text", "password", "file"],
+                            defaultValue: "text" },
+                    disabled: {type: "boolean", defaultValue: false },
+                    readOnly: {type: "boolean", defaultValue: false },
+                    intermediateChanges: {type: "boolean", defaultValue: false },
+                    tabIndex: { type: "number", defaultValue: 0 },
+                    imeMode:{type: "enum",
+                          values: [ "auto", "active", "inactive", "disabled"],
+                          defaultValue: "auto"},
+                    validating_leave: { type: "function", property: "leave"},
+                    validating_previous: { type: "function", property: "previous"},
+                    useDefaultOnErrorTele:{ type: "boolean", defaultValue: true},
+                    dialogLayoutXmlFile: { type: "string" },
+                    dialogClassName: { type: "string" },
+                    dialogCreateParameter: { type: "function" },
+                    dialogSelected: { type: "function" },
+                    dialogClosed: { type: "function" },
+                    keybindEnabled: { type: "boolean", defaultValue: false },
+                    onEdit: { type: "function" },
+                    onEditEventType: { type: "string" },
+                    caret:{ type: "enum",
+                            values: [ "select", "start", "end" ],
+                            defaultValue: "select" },
+                    triggerEventIfEmpty: { type: "boolean", defaultValue: false }
+                }
+            },
+
+            dateTextBox: {
+                type: maskat.intramart.widget.DateTextBoxWrapper,
+                attributes: {
+                    top: { type: "length", required: true },
+                    left: { type: "length", required: true },
+                    name: { type: "string", required: true },
+                    width: { type: "length" },
+                    height: { type: "length" },
+                    tooltip: { type: "string" },
+                    contextMenu: { type: "string" },
+                    cssStyle: { type: "string", defaultValue: "" },
+                    cssClass: { type: "string", defaultValue: "" },
+                    maxlength: { type: "number", required: true },
+                    constraints: { type: "string", defaultValue: maskat.intramart.core.Constants.DATETEXTBOX_PATTERNS },
+                    displayPattern: { type: "string" },
+                    defaultDisplayPattern: { type: "string" },
+                    invalidMessage: { type: "string"},
+                    promptMessage: {type: "string"},
+                    required: {type: "boolean"},
+                    value: { type: "string" },
+                    lowercase: {type: "boolean", defaultValue: false },
+                    propercase: {type: "boolean", defaultValue: false },
+                    trim: {type: "boolean", defaultValue: false },
+                    uppercase: {type: "boolean", defaultValue: false },
+                    disabled: {type: "boolean", defaultValue: false },
+                    readOnly: {type: "boolean", defaultValue: false },
+                    intermediateChanges: {type: "boolean", defaultValue: false },
+                    tabIndex: { type: "number", defaultValue: 0 },
+                    tooltipPosition: { type: "Array", defaultValue: "after,before" },
+                    imeMode:{ type: "enum",
+                              values: [ "auto", "active", "inactive", "disabled"],
+                              defaultValue: "inactive"},
+                    validating_leave: { type: "function", property: "leave"},
+                    validating_previous: { type: "function", property: "previous"},
+                    useDefaultOnErrorTele:{ type: "boolean", defaultValue: true},
+                    dialogLayoutXmlFile: { type: "string" },
+                    dialogClassName: { type: "string" },
+                    dialogCreateParameter: { type: "function" },
+                    dialogSelected: { type: "function" },
+                    dialogClosed: { type: "function" },
+                    keybindEnabled: { type: "boolean", defaultValue: false },
+                    onEdit: { type: "function" },
+                    onEditEventType: { type: "string" },
+                    caret:{ type: "enum",
+                            values: [ "select", "start", "end" ],
+                            defaultValue: "select" },
+                    triggerEventIfEmpty: { type: "boolean", defaultValue: false }
+                }
+            },
+
+            numberTextBox: {
+                type: maskat.intramart.widget.NumberTextBoxWrapper,
+                attributes: {
+                    top: { type: "length", required: true },
+                    left: { type: "length", required: true },
+                    name: { type: "string", required: true },
+                    width: { type: "length" },
+                    height: { type: "length" },
+                    tooltip: { type: "string" },
+                    contextMenu: { type: "string" },
+                    cssStyle: { type: "string", defaultValue: "" },
+                    cssClass: { type: "string", defaultValue: "" },
+                    maxlength: { type: "number", required: true },
+                    value: { type: "string" },
+                    invalidMessage: { type: "string" },
+                    promptMessage: { type: "string" },
+                    required: { type: "boolean" },
+                    constraints: { type: "string" },
+                    lowercase: { type: "boolean", defaultValue: false },
+                    propercase: { type: "boolean", defaultValue: false },
+                    trim: { type: "boolean", defaultValue: false },
+                    uppercase: { type: "boolean", defaultValue: false },
+                    disabled: { type: "boolean", defaultValue: false },
+                    readOnly: { type: "boolean", defaultValue: false },
+                    intermediateChanges: { type: "boolean", defaultValue: false },
+                    tabIndex: { type: "number", defaultValue: 0 },
+                    tooltipPosition: { type: "Array", defaultValue: "after,before" },
+                    imeMode:{ type: "enum",
+                              values: [ "auto", "active", "inactive", "disabled"],
+                              defaultValue: "inactive"},
+                    validating_leave: { type: "function", property: "leave"},
+                    validating_previous: { type: "function", property: "previous"},
+                    useDefaultOnErrorTele:{ type: "boolean", defaultValue: true},
+                    dialogLayoutXmlFile: { type: "string" },
+                    dialogClassName: { type: "string" },
+                    dialogCreateParameter: { type: "function" },
+                    dialogSelected: { type: "function" },
+                    dialogClosed: { type: "function" },
+                    keybindEnabled: { type: "boolean", defaultValue: false },
+                    onEdit: { type: "function" },
+                    onEditEventType: { type: "string" },
+                    caret:{ type: "enum",
+                            values: [ "select", "start", "end" ],
+                            defaultValue: "select" },
+                    triggerEventIfEmpty: { type: "boolean", defaultValue: false }
+                }
+            },
+
+            readTextBox: {
+                type: maskat.intramart.widget.ReadTextBoxWrapper,
+                attributes: {
+                    top: { type: "length", required: true },
+                    left: { type: "length", required: true },
+                    name: { type: "string", required: true },
+                    width: { type: "length" },
+                    height: { type: "length" },
+                    tooltip: { type: "string" },
+                    contextMenu: { type: "string" },
+                    cssStyle: { type: "string", defaultValue: "" },
+                    cssClass: { type: "string", defaultValue:"dijitTextBoxReadOnly"},
+                    maxlength: { type: "number" , defaultValue: 32767  },
+                    value: { type: "string" },
+                    lowercase: {type: "boolean", defaultValue: false },
+                    propercase: {type: "boolean", defaultValue: false },
+                    trim: {type: "boolean", defaultValue: false },
+                    uppercase: {type: "boolean", defaultValue: false },
+                    type: { type: "enum",
+                            values: [ "text", "password", "file"],
+                            defaultValue: "text" },
+                    disabled: {type: "boolean", defaultValue: false },
+                    intermediateChanges: {type: "boolean", defaultValue: false },
+                    tabIndex: { type: "number", defaultValue: -1 }
+                }
+            },
+
+            readDateTextBox: {
+                type: maskat.intramart.widget.ReadDateTextBoxWrapper,
+                attributes: {
+                    top: { type: "length", required: true },
+                    left: { type: "length", required: true },
+                    name: { type: "string", required: true },
+                    width: { type: "length" },
+                    height: { type: "length" },
+                    tooltip: { type: "string" },
+                    contextMenu: { type: "string" },
+                    cssStyle: { type: "string", defaultValue: "" },
+                    cssClass: { type: "string", defaultValue:"dijitTextBoxReadOnly"},
+                    maxlength: { type: "number" , defaultValue: 10  },
+                    constraints: { type: "string", defaultValue: maskat.intramart.core.Constants.DATETEXTBOX_PATTERNS },
+                    displayPattern: { type: "string" },
+                    defaultDisplayPattern: { type: "string" },
+                    value: { type: "string" },
+                    lowercase: {type: "boolean", defaultValue: false },
+                    propercase: {type: "boolean", defaultValue: false },
+                    trim: {type: "boolean", defaultValue: false },
+                    uppercase: {type: "boolean", defaultValue: false },
+                    disabled: {type: "boolean", defaultValue: false },
+                    intermediateChanges: {type: "boolean", defaultValue: false },
+                    tabIndex: { type: "number", defaultValue: -1 }
+                }
+            },
+
+            readNumberTextBox: {
+                type: maskat.intramart.widget.ReadNumberTextBoxWrapper,
+                attributes: {
+                    top: { type: "length", required: true },
+                    left: { type: "length", required: true },
+                    name: { type: "string", required: true },
+                    width: { type: "length" },
+                    height: { type: "length" },
+                    tooltip: { type: "string" },
+                    contextMenu: { type: "string" },
+                    cssStyle: { type: "string", defaultValue: "" },
+                    cssClass: { type: "string", defaultValue:"dijitTextBoxReadOnly"},
+                    maxlength: { type: "number" , defaultValue: 32767  },
+                    value: { type: "string" },
+                    constraints: { type: "string"},
+                    lowercase: {type: "boolean", defaultValue: false },
+                    propercase: {type: "boolean", defaultValue: false },
+                    trim: {type: "boolean", defaultValue: false },
+                    uppercase: {type: "boolean", defaultValue: false },
+                    disabled: {type: "boolean", defaultValue: false },
+                    intermediateChanges: {type: "boolean", defaultValue: false },
+                    tabIndex: { type: "number", defaultValue: -1 }
+                }
+            },
+
+            textarea: {
+                type: maskat.intramart.widget.TextAreaWrapper,
+                attributes: {
+                    name: { type: "string" , required: true  },
+                    top: { type: "length" , required: true },
+                    left: { type: "length" , required: true },
+                    width: { type: "length", required: true },
+                    height: { type: "length", required: true },
+                    rows: { type: "number" ,  defaultValue:1},
+                    cols: { type: "number" ,  defaultValue:1},
+                    value: { type: "string" },
+                    readonly: { type: "boolean" ,  defaultValue:false },
+                    readOnly: { type: "boolean" ,  defaultValue:false },
+                    cssStyle: { type: "string" },
+                    cssClass: { type: "string" },
+                    tabIndex: { type: "number", defaultValue: -1 },
+                    wrap: { type: "enum",
+                            values: [ "off", "soft"],
+                            defaultValue: "soft"},
+                    disabled: {type: "boolean",defaultValue: false },
+                    imeMode:{ type: "enum",
+                              values: [ "auto", "active", "inactive", "disabled"],
+                              defaultValue: "auto"},
+                    caret:{ type: "enum",
+                            values: [ "select", "start", "end" ],
+                            defaultValue: "end" },
+                    funcOnLeave: { type: "function", property: "leave"},
+                    funcOnPrevious: { type: "function", property: "previous"},
+                    triggerEventIfEmpty: { type: "boolean", defaultValue: false }
+                }
+            },
+
+            simpleTextarea: {
+                type: maskat.intramart.widget.SimpleTextareaWrapper,
+                attributes: {
+                    top: { type: "length", required: true },
+                    left: { type: "length", required: true },
+                    width: { type: "length"},
+                    height: { type: "length"},
+                    name: { type: "string", required: true },
+                    rows: { type: "number", defaultValue: 3 },
+                    cols: { type: "number", defaultValue: 20 },
+                    tooltip: { type: "string" },
+                    contextMenu: { type: "string" },
+                    cssStyle: { type: "string", defaultValue:""},
+                    cssClass: { type: "string" },
+                    maxlength: { type: "number", defaultValue: Infinity },
+                    lowercase: {type: "boolean"},
+                    propercase: {type: "boolean"},
+                    uppercase: {type: "boolean"},
+                    disabled: {type: "boolean", defaultValue: false },
+                    readOnly: {type: "boolean", defaultValue: false },
+                    intermediateChanges: {type: "boolean"},
+                    tabIndex: { type: "number", defaultValue: 0 }
+                },
+                children: {
+                    "#cdata-section": { property: "value" }
+                }
+            },
+
+            titleBar: {
+                type:  maskat.intramart.widget.TitleBarWrapper,
+                attributes: {
+                    title: { type: "string", defaultValue: "no title" },
+                    titleFlg: { type: "boolean", defaultValue: false },
+                    titleBgColor: { type: "string", defaultValue: maskat.intramart.core.Constants.TITLEBAR_TITLEBGCOLOR },
+                    titleColor: { type: "string", defaultValue: maskat.intramart.core.Constants.TITLEBAR_TITLECOLOR },
+                    top: { type: "length", defaultValue: "10px" },
+                    left: { type: "length", defaultValue: "10px" },
+                    name: { type: "string", required: true },
+                    width: { type: "length"},
+                    height: { type: "length"},
+                    tooltip: { type: "string" },
+                    contextMenu: { type: "string" },
+                    closable: { type: "boolean", defaultValue: false },
+                    selected: { type: "boolean", defaultValue: false },
+                    layoutAlign: { type: "enum",
+                                   values: [ "top", "left", "right", "bottom", "client", "none" ],
+                                   defaultValue: "none" },
+                    cssStyle: { type: "string", defaultValue: "" },
+                    cssClass: { type: "string", defaultValue:"dijitTitleBar"},
+                    sizeShare: { type: "number", defaultValue: 10 },
+                    sizeMin: { type: "number", defaultValue: 10 },
+                    dragFlg: { type: "boolean", defaultValue: false },
+                    titleName: { type: "string", defaultValue: "" },
+                    iconClass: { type: "enum",
+                          values: [
+                                  "titlebarIcon btnIconActive",
+                                  "titlebarIcon btnIconBlanketDeliberation",
+                                  "titlebarIcon btnIconClose",
+                                  "titlebarIcon btnIconComplete",
+                                  "titlebarIcon btnIconCopy",
+                                  "titlebarIcon btnIconDelete",
+                                  "titlebarIcon btnIconEdit",
+                                  "titlebarIcon btnIconFlow",
+                                  "titlebarIcon btnIconHelp", 
+                                  "titlebarIcon btnIconInfo",
+                                  "titlebarIcon btnIconList",
+                                  "titlebarIcon btnIconNew",
+                                  "titlebarIcon btnIconNext",
+                                  "titlebarIcon btnIconNextDown",
+                                  "titlebarIcon btnIconNextUp",
+                                  "titlebarIcon btnIconPrevious",
+                                  "titlebarIcon btnIconPrint",
+                                  "titlebarIcon btnIconRefresh",
+                                  "titlebarIcon btnIconSave",
+                                  "titlebarIcon btnIconSearch",
+                                  "titlebarIcon btnIconTitle",
+                                  "titlebarIcon bizBtnIconBizOrganization",
+                                  "titlebarIcon bizBtnIconBizOrganizationGroup",
+                                  "titlebarIcon bizBtnIconBeforeBlack",
+                                  "titlebarIcon bizBtnIconBlack",
+                                  "titlebarIcon bizBtnIconRed",
+                                  "titlebarIcon bizBtnIconPostable",
+                                  "titlebarIcon bizBtnIconNotPostable",
+                                  "titlebarIcon bizBtnIconHaveChild",
+                                  "titlebarIcon bizBtnIconNotHaveChild",
+                                  "titlebarIcon bizBtnIconDetail",
+                                  "titlebarIcon bizBtnIconDisplaySaved",
+                                  "titlebarIcon bizBtnIconEntry",
+                                  "titlebarIcon bizBtnIconReference"
+                                  ],
+                          defaultValue: "titlebarIcon btnIconTitle" }
+                }
+            },
+
+            titlePane: {
+                type: maskat.intramart.widget.TitlePaneWrapper,
+                attributes: {
+                    top: { type: "length" },
+                    left: { type: "length" },
+                    name: { type: "string", required: true },
+                    width: { type: "length", defaultValue: "100%" },
+                    height: { type: "length", defaultValue: "100%" },
+                    tooltip: { type: "string" },
+                    contextMenu: { type: "string" },
+                    title: { type: "string", defaultValue: "no title" },
+                    open: { type: "boolean", defaultValue: false },
+                    duration: { type: "number", defaultValue: 250 },
+                    errorMessage: { type: "string" },
+                    extractContent: { type: "boolean", defaultValue: false },
+                    href: { type: "string" },
+                    isLoaded: { type: "boolean" },
+                    loadingMessage: { type: "string" },
+                    parseOnLoad: { type: "boolean", defaultValue: true },
+                    preload: { type: "boolean", defaultValue: false },
+                    preventCache: { type: "boolean", defaultValue: false },
+                    refreshOnShow: { type: "boolean", defaultValue: false },
+                    cssStyle: { type: "string", defaultValue:""},
+                    cssClass: { type: "string", defaultValue:""},
+                    resizeSingleChild: { type: "boolean", defaultValue: false },
+                    doLayout: { type: "boolean", defaultValue: true }
+                },
+                children: {
+                    "*": { property: "children", repeat: true }
+                }
+            },
+
+            toolbar: {
+                type: maskat.intramart.widget.ToolbarWrapper,
+                attributes: {
+                    name: { type: "string", required: true },
+                    top: { type: "length", required: true },
+                    left: { type: "length", required: true },
+                    width: { type: "length", defaultValue: "100%" },
+                    height: { type: "length", defaultValue: "100%" },
+                    contextMenu: { type: "string" },
+                    tooltip: { type: "string" },
+                    title: { type: "string", defaultValue:""},
+                    cssStyle: { type: "string", defaultValue:""},
+                    cssClass: { type: "string", defaultValue:""}
+                },
+                children: {
+                  iconButton: { property: "children", repeat: true },
+                    button: { property: "children", repeat: true },
+                    toolbarSeparator: { property: "children", repeat: true }
+                }
+            },
+
+            toolbarSeparator: {
+                type: maskat.intramart.widget.ToolbarSeparatorWrapper,
+                attributes: {
+                    name: { type: "string", required: true },
+                    top: { type: "length", required: true },
+                    left: { type: "length", required: true },
+                    height: { type: "length", defaultValue: "100%" },
+                    width: { type: "length" },
+                    tooltip: { type: "string" },
+                    contextMenu: { type: "string" },
+                    cssStyle: { type: "string", defaultValue:""},
+                    cssClass: { type: "string", defaultValue:""}
+                }
+            },
+            /* tree start */
+            tree: {
+                type: maskat.intramart.widget.TreeWrapper,
+                attributes: {
+                    name: { type: "string", required: true },
+                    top: { type: "length", required: true },
+                    left: { type: "length", required: true },
+                    persist: { type: "boolean", defaultValue: true },
+                    openIcon: { type: "string", defaultValue: "dijitFolderOpened" },
+                    closeIcon: { type: "string", defaultValue: "dijitFolderClosed" },
+                    leafIcon: { type: "string", defaultValue: "dijitLeaf" },
+                    tooltip: { type: "string" },
+                    contextMenu: { type: "string" },
+                    cssStyle: { type: "string", defaultValue:""},
+                    cssClass: { type: "string", defaultValue:""},
+                    label: { type: "string" },
+                    store: { type: "string" },
+                    labelAttr: { type: "string", defaultValue: "label" },
+                    identifier: { type: "string", defaultValue: "name" },
+                    showRoot: { type: "boolean", defaultValue: true },
+                    openOnClick: { type: "boolean", defaultValue: false },
+                    openOnDblClick: { type: "boolean", defaultValue: false }
+                },
+                children: {
+                    forestStoreModel: { property: "model", repeat:false },
+                    treeStoreModel: { property: "model", repeat:false },
+                    treeDndSource: { property: "dndController", repeat:false },
+                    treeNode: { property: "treeNodes", repeat: true },
+                    childrenAttr: { property: "childrenAttr", repeat: true },
+                    query: { property: "query", repeat: true },
+                    xmlStore: { property: "storeWrapper", repeat: false },
+                    csvStore: { property: "storeWrapper", repeat: false },
+                    opmlStore: { property: "storeWrapper", repeat: false },
+                    htmlTableStore: { property: "storeWrapper", repeat: false },
+                    itemFileReadStore: { property: "storeWrapper", repeat: false },
+                    itemFileWriteStore: { property: "storeWrapper", repeat: false }
+                }
+            },
+            
+            forestStoreModel: {
+                attributes: {
+                    store: { type: "string" },
+                    labelAttr: { type: "string" },
+                    rootId: { type: "string" , defaultValue: "root"  },
+                    rootLabel: { type: "string", defaultValue: "ROOT" },
+                    onAddToRoot: { type: "function" },
+                    onLeaveRoot: { type: "function" }
+                },
+                children: {
+                    query: { property: "query", repeat: true },
+                     childrenAttr: { property: "childrenAttr", repeat: true },
+                    xmlStore: { property: "storeWrapper", repeat: false },
+                    csvStore: { property: "storeWrapper", repeat: false },
+                    opmlStore: { property: "storeWrapper", repeat: false },
+                    htmlTableStore: { property: "storeWrapper", repeat: false },
+                    itemFileReadStore: { property: "storeWrapper", repeat: false },
+                    itemFileWriteStore: { property: "storeWrapper", repeat: false }
+                }
+            },
+
+            treeStoreModel: {
+                attributes: {
+                    store: { type: "string" },
+                    labelAttr: { type: "string" }
+                },
+                children: {
+                    query: { property: "query", repeat: true },
+                     childrenAttr: { property: "childrenAttr", repeat: true },
+                    xmlStore: { property: "storeWrapper", repeat: false },
+                    csvStore: { property: "storeWrapper", repeat: false },
+                    opmlStore: { property: "storeWrapper", repeat: false },
+                    htmlTableStore: { property: "storeWrapper", repeat: false },
+                    itemFileReadStore: { property: "storeWrapper", repeat: false },
+                    itemFileWriteStore: { property: "storeWrapper", repeat: false }
+                }
+            },
+            childrenAttr: {
+                attributes: {
+                    attrName: { type: "string", required: true }
+                }
+            },
+            
+            query: {
+                attributes: {
+                    "*": { type: "string" }
+                }
+            },
+            
+            treeNode: {
+                type: maskat.widget.dojo.DojoWidgetWrapper,
+                attributes: {
+                    parentNode: { type: "string" },
+                    openIcon: { type: "string", defaultValue: "dijitFolderOpened" },
+                    closeIcon: { type: "string", defaultValue: "dijitFolderClosed" },
+                    leafIcon: { type: "string", defaultValue: "dijitLeaf" },
+                    tooltip: { type: "string" },
+                    contextMenu: { type: "string" },
+                    label: { type: "string" },
+                    name: { type: "string", required: true },
+                    type: { type: "string" }
+                },
+                children: {
+                    item: { property: "item", repeat: false },
+                    treeNode: { property: "treeNodes", repeat: true }
+                }
+            },
+            
+            item: {
+                attributes: {
+                    "*": { type: "string" }
+                }
+            },
+            
+            treeDndSource: {
+                type: maskat.intramart.widget.TreeDndSourceWrapper,
+                attributes: {
+                    name: { type: "string", required: true },
+                    skipForm: { type: "boolean" },
+                    isSource: { type: "boolean", defaultValue: true },
+                    horizontal: { type: "boolean" },
+                    copyOnly: { type: "boolean" },
+                    onDndDrop: { type: "function" },
+                    itemCreator: { type: "function" },
+                    onDndCancel: { type: "function" },
+                    checkAcceptance: { type: "function" },
+                    checkItemAcceptance: { type: "function" },
+                    dragThreshold: { type: "number", defaultValue: 0 },
+                    betweenThreshold: { type: "number", defaultValue: 0 }
+                },
+                children: {
+                    dndType: { property: "accepts", repeat: true }
+                }
+            },
+            
+            dndType: {
+                attributes: {
+                    value: { type: "string", required: true }
+                }
+            },
+            /* tree end */
+            
+            simpleImage: {
+                type: maskat.widget.intramart.SimpleImageWrapper,
+                attributes: {
+                    name: { type: "string", required: true },
+                    top: { type: "length" },
+                    left: { type: "length" },
+                    width: { type: "length" },
+                    height: { type: "length" },
+                    cssClass: {type: "string"},
+                    cssStyle: {type: "string"}
+                        
+                }
+            }
+        }

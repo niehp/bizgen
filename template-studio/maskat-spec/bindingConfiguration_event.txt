@@ -1,0 +1,257 @@
+        {
+            "#document": {
+                children: {
+                    eventDef: {}
+                }
+            },
+
+            eventDef: {
+                type: maskat.event.EventDispatcher,
+                attributes: {},
+                children: {
+                    remoteUrl: {},
+                    header: { property: "headers", repeat: true },
+                    component: { property: "handlers", repeat: true, key: "id", value: "events" },
+                    event: { property: "events", repeat: true, key: "id" },
+                    eventRef: {  property: "eventRefs", repeat: true, key: "id" },
+                    desc: {}
+                }
+            },
+    
+            remoteUrl: {
+                attributes: {
+                    url: { type: "string", required: true }
+                }
+            },
+    
+            header: {
+                attributes: {
+                    name: { type: "string", required: true },
+                    value: { type: "string", required: true }
+                }
+            },
+    
+            component: {
+                attributes: {
+                    id: { type: "string", required: true }
+                },
+                children: {
+                    event: { property: "events", repeat: true, key: "id" },
+                    desc: {}
+                }
+            },
+    
+            event: {
+                attributes: {
+                    id: { type: "string", required: true },
+                    remoteUrl: { type: "string", property: "url" },
+                    type: {
+                        type: "enum",
+                        values: [ "local", "remote" ],
+                        defaultValue: "remote"
+                    },
+                    async: { type: "boolean", defaultValue: true },
+                    ref: { type: "string" },
+                    marshal: { type: "function" },
+                    unmarshal: { type: "function" },
+                    start: { type: "function", property: "onStart" },
+                    before: { type: "function", property: "onBeforeRequest" },
+                    after: { type: "function", property: "onAfterResponse" },
+                    finish: { type: "function", property: "onFinish" },
+                    leave: { type: "function", property: "onLeave" },
+                    timeout: { type: "number" },
+                    onTimeoutError: { type: "function", property: "onRequestTimeout" },
+                    confirmDialog: { type: "string" },
+                    endDialog: { type: "string" },
+                    forceSend: { type: "boolean", defaultValue: false },
+                    progressType: {
+                        type: "enum",
+                        values: [ "dialog", "layout" ]
+                    }
+                },
+                children: {
+                    header: { property: "headers", repeat: true },
+                    param: { property: "marshaller" },
+                    result: { property: "unmarshaller" },
+                    request: { property: "marshaller" },
+                    response: { property: "unmarshaller" },
+                    desc: {}
+                }
+            },
+    
+            eventRef: {
+                attributes: {
+                    id: { type: "string", required: true }
+                },
+                children: {
+                    header: { property: "headers", repeat: true },
+                    param: { property: "marshaller" },
+                    result: { property: "unmarshaller" },
+                    desc: {}
+                }
+            },
+    
+            param: {
+                attributes: {
+                    rootNode: { type: "string" },
+                    ns: { type: "string" },
+                    soap: { type: "boolean", defaultValue: false },
+                    type: {
+                        type: "enum", values: [ "xml", "json" ]
+                    }
+                },
+                children: {
+                    source: { property: "sources", repeat: true },
+                    desc: {}
+                }
+            },
+    
+            source: {
+                attributes: {
+                    obj: { type: "string", required: true },
+                    node: { type: "string" },
+                    childNode: { type: "string" },
+                    idxRef: { type: "string" },
+                    fromkey: { type: "string" },
+                    type: { type: "string" },
+                    regexp: { type: "string" },
+                    min: { type: "number" },
+                    max: { type: "number" },
+                    desc: { type: "string" },
+                    sendBlankElement: { type: "boolean", defaultValue: false },
+                    teleType: { type: "string" }
+                },
+                children: {
+                    bind: { property: "binds", repeat: true },
+                    desc: {}
+                }
+            },
+    
+            result: {
+                attributes: {
+                    rootNode: { type: "string" },
+                    ns: { type: "string" },
+                    onErrorTele: { type: "function" },
+                    soap: { type: "boolean", defaultValue: false },
+                    type: {
+                        type: "enum", values: [ "xml", "json" ]
+                    }
+                },
+                children: {
+                    target: { property: "targets", repeat: true },
+                    desc: {}
+                }
+            },
+    
+            target: {
+                attributes: {
+                    out: { type: "string", property: "widgetId", required: true },
+                    "in": { type: "string", property: "node" },
+                    inkey: { type: "string", property: "childNode" },
+                    type: {
+                        type: "enum",
+                        values: [ "local", "remote" ]
+                    },
+                    teleType: { type: "string" },
+                    workType: { type: "function" }
+                },
+                children: {
+                    bind: { property: "binds", repeat: true },
+                    desc: {}
+                }
+            },
+    
+            bind: {
+                attributes: {
+                    node: { type: "string", required: true },
+                    fromkey: { type: "string", property: "property" },
+                    tokey: { type: "string", property: "property" }
+                }
+            },
+    
+            desc: {
+                children: {
+                    "#text": {}
+                }
+            },
+
+            request: {
+                type: maskat.event.JSONRequestMarshaller,
+                attributes: {
+                    contentType: { type: "string", defaultValue: "application/json" },
+                    method: { type: "string", defaultValue: "post" }
+                },
+                children: {
+                    object: { property: "object" },
+                    array: { property: "array" }
+                }
+            },
+
+            response: {
+                type: maskat.event.JSONResponseUnmarshaller,
+                attributes: {
+                    contentType: { type: "string", defaultValue: "application/json" },
+                    onerror: { type: "function", property: "onErrorTele" }
+                },
+                children: {
+                    object: { property: "object" },
+                    array: { property: "array" }
+                }
+            },
+
+            object: {
+                children: {
+                    property: { property: "properties", repeat: true }
+                }
+            },
+
+            property: {
+                attributes: {
+                    name: { type: "string", required: true },
+                    type: {
+                        type: "enum", values: [ "string", "number", "boolean", "object", "Array" ]
+                    }
+                },
+                children: {
+                    object: { property: "object" },
+                    array:  { property: "array" },
+                    widget: { property: "widget" },
+                    variable: { property: "variable" },
+                    literal: { property: "literal" }
+                }
+            },
+
+            array: {
+                children: {
+                    object: { property: "object" },
+                    widget: { property: "widget" },
+                    variable: { property: "variable" }
+                }
+            },
+
+            widget: {
+                attributes: {
+                    name: { type: "string", required: true },
+                    method: { type: "string", defaultValue: "" },
+                    property: { type: "string" },
+                    defaultValue: { type: "json" }
+                }
+            },
+
+            variable: {
+                attributes: {
+                    name: { type: "string", required: true },
+                    property: { type: "string" },
+                    defaultValue: { type: "json" },
+                    scope: {
+                        type: "enum", values: [ "global", "layout" ],  defaultValue: "global"
+                    }
+                }
+            },
+
+            literal: {
+                attributes: {
+                    value: { type: "string" }
+                }
+            }
+        }
