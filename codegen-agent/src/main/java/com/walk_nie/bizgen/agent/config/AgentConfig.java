@@ -37,6 +37,10 @@ public final class AgentConfig {
     private final boolean reviewRequired;
     private final int indentSize;
 
+    private final int agentMaxRounds;
+    private final int agentMaxToolCalls;
+    private final int agentMaxSameCall;
+
     private AgentConfig(Properties properties) {
         this.baseUrl = value(properties, "llm.baseUrl", "http://127.0.0.1:11434/v1");
         this.chatPath = value(properties, "llm.chatPath", "/chat/completions");
@@ -66,6 +70,10 @@ public final class AgentConfig {
         this.searchMaxFiles = Integer.parseInt(value(properties, "gen.searchMaxFiles", "2000"));
         this.reviewRequired = Boolean.parseBoolean(value(properties, "gen.reviewRequired", "true"));
         this.indentSize = Integer.parseInt(value(properties, "gen.indentSize", "4"));
+
+        this.agentMaxRounds = Integer.parseInt(value(properties, "agent.maxRounds", "8"));
+        this.agentMaxToolCalls = Integer.parseInt(value(properties, "agent.maxToolCalls", "30"));
+        this.agentMaxSameCall = Integer.parseInt(value(properties, "agent.maxSameCall", "3"));
     }
 
     private static String value(Properties properties, String key, String defaultValue) {
@@ -171,6 +179,18 @@ public final class AgentConfig {
         return indentSize;
     }
 
+    public int agentMaxRounds() {
+        return agentMaxRounds;
+    }
+
+    public int agentMaxToolCalls() {
+        return agentMaxToolCalls;
+    }
+
+    public int agentMaxSameCall() {
+        return agentMaxSameCall;
+    }
+
     /** API キーをマスクして表示用文字列を返す。 */
     public String describe() {
         String masked = apiKey.isEmpty() ? "(未設定)" : "****" + apiKey.substring(Math.max(0, apiKey.length() - 4));
@@ -188,6 +208,8 @@ public final class AgentConfig {
                 + "maxTables : " + maxTables + "\n"
                 + "similarCode: maxFiles=" + maxSimilarFiles + ", maxChars=" + maxSimilarCodeChars
                 + ", scanLimit=" + searchMaxFiles + "\n"
+                + "agentLimits: rounds=" + agentMaxRounds + ", toolCalls=" + agentMaxToolCalls
+                + ", sameCall=" + agentMaxSameCall + "\n"
                 + "reviewRequired: " + reviewRequired;
     }
 }

@@ -63,7 +63,8 @@ public final class GenerateJavaDraftStage implements Stage<JavaGenState, JavaGen
                     config.temperature(), config.maxTokens(), config.seed());
             LlmResponse response = context.ask(request);
 
-            JavaDraft draft = parseDraft(response.content(), packageName, resolved);
+            JavaDraft draft = parseDraft(response.content(), packageName,
+                    resolved.variable("packageComment", resolved.spec().title()));
             state.setDraft(draft);
             state.advance(JavaGenState.Phase.DRAFTED);
             return state;
@@ -110,7 +111,12 @@ public final class GenerateJavaDraftStage implements Stage<JavaGenState, JavaGen
         }
     }
 
-    private JavaDraft parseDraft(String raw, String packageName, ResolvedFeature resolved) {
+    private JavaDraft parseDraft(String raw, String packageName, String defaultPackageComment) {
+        return parseDraftText(raw, packageName, defaultPackageComment);
+    }
+
+    /** Agent ループの最終回答も同じ形式で解釈できるように、共通の解析処理として公開する。 */
+    public static JavaDraft parseDraftText(String raw, String packageName, String defaultPackageComment) {
         String text = StrUtil.stripCodeFence(raw);
         int packageAt = text.indexOf(PACKAGE_MARKER);
         int classAt = text.indexOf(CLASS_MARKER);
@@ -123,9 +129,8 @@ public final class GenerateJavaDraftStage implements Stage<JavaGenState, JavaGen
             classCode = text.trim();
         }
         if (packageInfo.isEmpty()) {
-            String comment = resolved.variable("packageComment", resolved.spec().title());
-            packageInfo = "/**\n * " + comment + "\n * 生成コードは手動レビュー後に取り込む。\n */\npackage "
-                    + packageName + ";\n";
+            packageInfo = "/**\n * " + defaultPackageComment + "\n"
+                    + " * 生成コードは手動レビュー後に取り込む。\n */\npackage " + packageName + ";\n";
         }
         return new JavaDraft(packageInfo, classCode, raw);
     }

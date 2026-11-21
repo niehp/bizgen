@@ -46,8 +46,8 @@ public final class MdRepository {
 
     /** 機能 md を読み込む。 */
     public FeatureSpec loadFeature(String name) throws IOException {
-        Path path = resolve(levelDir(DesignLevel.FEATURE), name);
-        return new FeatureSpec(MdDoc.parse(path, DesignLevel.FEATURE));
+        Path path = resolve(levelDir(DesignLevel.USECASE), name);
+        return new FeatureSpec(MdDoc.parse(path, DesignLevel.USECASE));
     }
 
     /** 任意レベルの設計 md を読み込む。 */
@@ -66,7 +66,7 @@ public final class MdRepository {
 
     /**
      * 機能 md が参照する設計ドキュメントを読み込む。
-     * Java共通・プロジェクト共通は常時読み込み、それ以外（機能/クラス/メソッド）は明示参照時のみ。
+     * Java共通・プロジェクト共通は常時読み込み、それ以外（ユースケース/クラス/メソッド）は明示参照時のみ。
      */
     public List<MdDoc> loadDesigns(List<DesignRef> refs) throws IOException {
         Set<String> loaded = new LinkedHashSet<String>();

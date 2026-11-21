@@ -1,5 +1,7 @@
 package com.walk_nie.bizgen.agent.cli;
 
+import com.walk_nie.bizgen.agent.agent.AgentResult;
+import com.walk_nie.bizgen.agent.agent.AgentRunner;
 import com.walk_nie.bizgen.agent.config.AgentConfig;
 import com.walk_nie.bizgen.agent.generator.java.JavaGenPipeline;
 import com.walk_nie.bizgen.agent.generator.java.JavaGenState;
@@ -48,12 +50,22 @@ public final class Cli {
     private final PipelineContext context;
     private final PrintStream out;
 
+    private AgentRunner agentRunner;
+    private AgentResult lastAgentResult;
+
     public Cli(AgentConfig config, PrintStream out) {
         this.config = config;
         this.out = out;
         this.repository = new MdRepository(config);
         this.context = new PipelineContext(config, repository,
                 new VariableTable(), new HttpLlmClient(config));
+    }
+
+    private AgentRunner runner() {
+        if (agentRunner == null) {
+            agentRunner = new AgentRunner(context);
+        }
+        return agentRunner;
     }
 
     public void loop() throws IOException {
@@ -108,6 +120,14 @@ public final class Cli {
             javaGen(options);
         } else if ("sql-gen".equals(command)) {
             sqlGen(options);
+        } else if ("tools".equals(command)) {
+            tools();
+        } else if ("agent-gen".equals(command)) {
+            agentGen(options);
+        } else if ("agent-sql".equals(command)) {
+            agentSql(options);
+        } else if ("agent-trace".equals(command)) {
+            agentTrace();
         } else {
             out.println("不明なコマンド: " + command + "（'help' を参照）");
         }
@@ -117,15 +137,20 @@ public final class Cli {
         out.println("使用可能なコマンド:");
         out.println("  help");
         out.println("  config");
-        out.println("  list java|project|feature|class|method|schema|prompt|template");
+        out.println("  list java|project|usecase|class|method|schema|prompt|template");
         out.println("  template java-class|table-schema [--out <file>]");
         out.println("  pipeline java|sql");
         out.println("  preview java --feature <md名>");
-        out.println("  search --feature <md名>                    既存 Java の類似コード検索のみ実行（LLM 不使用）");
         out.println("  preview sql --type select|update|delete --desc <内容> --tables <日本語表名,...> [--shape <SQL雛形>]");
-        out.println("  java-gen --feature <md名>");
+        out.println("  preview agent [--feature <md名>]                 エージェントのツールと system prompt を表示");
+        out.println("  search --feature <md名>                    既存 Java の類似コード検索のみ実行（LLM 不使用）");
+        out.println("  java-gen --feature <md名>                 通常の単発パイプラインで生成");
         out.println("  sql-gen --type select|update|delete --desc <内容> --tables <日本語表名,...>");
         out.println("           [--shape <SQL雛形>] [--prompt <prompt名>] [--var key=value]... [--out <file>]");
+        out.println("  tools                                     登録済み function tool 一覧（LLM 不使用）");
+        out.println("  agent-gen --feature <md名>                 マルチターン Agent + tool 呼び出しで Java 生成");
+        out.println("  agent-sql --type select|update|delete --desc <内容> --tables <日本語表名,...>");
+        out.println("  agent-trace                               直近の Agent ターントレースを表示");
         out.println("  exit");
         out.println("");
         out.println("※ LLM 接続情報は config/agent-config.properties に記載します（--live 引数はありません）。");
@@ -210,9 +235,23 @@ public final class Cli {
             new com.walk_nie.bizgen.agent.pipeline.stage.LoadTableSchemaStage().execute(state, context);
             new com.walk_nie.bizgen.agent.pipeline.stage.RenderSqlPromptStage().execute(state, context);
             out.println(state.renderedPrompt());
+        } else if ("agent".equalsIgnoreCase(target)) {
+            previewAgent();
         } else {
-            out.println("preview java|sql を指定してください");
+            out.println("preview java|sql|agent を指定してください");
         }
+    }
+
+    /** LLM を呼ばず、Agent に渡すツール定義と system prompt テンプレートを表示する。 */
+    private void previewAgent() throws IOException {
+        out.println("----- Java Agent tools -----");
+        out.print(runner().javaTools().describe());
+        out.println("----- SQL Agent tools -----");
+        out.print(runner().sqlTools().describe());
+        out.println("----- Java Agent system prompt (variables unresolved) -----");
+        out.println(repository.prompt("agent-java"));
+        out.println("----- SQL Agent system prompt (variables unresolved) -----");
+        out.println(repository.prompt("agent-sql"));
     }
 
     /** LLM を使わず、類似コード検索だけを実行して結果を表示する。 */
@@ -328,6 +367,72 @@ public final class Cli {
         out.println("----- SQL -----");
         out.println(result.sql());
         printTraces(context);
+    }
+
+    private void tools() {
+        out.println("----- Java Agent tools -----");
+        out.print(runner().javaTools().describe());
+        out.println("----- SQL Agent tools -----");
+        out.print(runner().sqlTools().describe());
+        out.println("limits: rounds=" + config.agentMaxRounds()
+                + ", toolCalls=" + config.agentMaxToolCalls()
+                + ", sameCall=" + config.agentMaxSameCall());
+    }
+
+    private void agentGen(Map<String, String> options) throws IOException {
+        String featureName = options.get("feature");
+        if (StrUtil.isBlank(featureName)) {
+            throw new IllegalArgumentException("--feature が必要です");
+        }
+        JavaGenState state = runner().generateJava(featureName);
+        lastAgentResult = runner().lastResult();
+        JavaWriteResult result = state.writeResult();
+        out.println("Agent Java 生成完了: " + result.classFile());
+        if (result.packageInfoFile() != null) {
+            out.println("パッケージコメント: " + result.packageInfoFile());
+        }
+        out.println("変更種別: " + result.intent() + "（" + state.intent().source() + "）");
+        if (!result.warnings().isEmpty()) {
+            out.println("[WARN] 検証警告: " + result.warnings());
+        }
+        if (config.reviewRequired()) {
+            out.println("[REVIEW] 生成コードは人間がレビューしてから取り込んでください。");
+        }
+        printAgentTrace();
+        printTraces(context);
+    }
+
+    private void agentSql(Map<String, String> options) throws IOException {
+        SqlGenRequest request = buildSqlRequest(options);
+        SqlGenState state = runner().generateSql(request);
+        lastAgentResult = runner().lastResult();
+        SqlGenResult result = state.result();
+        out.println("Agent SQL 生成完了: " + result.file());
+        out.println("使用表: " + result.tableNames());
+        out.println("----- SQL -----");
+        out.println(result.sql());
+        printAgentTrace();
+        printTraces(context);
+    }
+
+    private void agentTrace() {
+        if (lastAgentResult == null) {
+            out.println("Agent はまだ実行されていません。");
+            return;
+        }
+        printAgentTrace();
+    }
+
+    private void printAgentTrace() {
+        if (lastAgentResult == null) {
+            return;
+        }
+        out.println("----- Agent トレース (rounds=" + lastAgentResult.rounds()
+                + ", toolCalls=" + lastAgentResult.toolCallCount() + ") -----");
+        out.print(lastAgentResult.state().describeTraces());
+        if (!lastAgentResult.success()) {
+            out.println("[ERROR] " + lastAgentResult.error());
+        }
     }
 
     private SqlGenRequest buildSqlRequest(Map<String, String> options) {

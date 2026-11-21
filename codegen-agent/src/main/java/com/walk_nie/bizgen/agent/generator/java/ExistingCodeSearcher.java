@@ -48,11 +48,31 @@ public final class ExistingCodeSearcher {
 
     public static SimilarCodeResult search(AgentConfig config, ResolvedFeature resolved,
                                            SemanticMap semanticMap, String targetFileRelative) {
-        Path root = config.searchJavaRoot() != null ? config.searchJavaRoot() : config.existingJavaRoot();
-        if (root != null) {
-            root = root.toAbsolutePath().normalize();
-        }
         Map<String, Integer> keywords = extractKeywords(resolved, semanticMap, targetFileRelative);
+        return searchWithKeywords(config, resolveRoot(config), keywords, targetFileRelative);
+    }
+
+    /** Agent の function tool 用。LLM が選んだキーワードだけで決定論的に検索する。 */
+    public static SimilarCodeResult searchByKeywords(AgentConfig config, List<String> keywords,
+                                                     String targetFileRelative) {
+        Map<String, Integer> weighted = new LinkedHashMap<String, Integer>();
+        Set<String> seen = new HashSet<String>();
+        if (keywords != null) {
+            for (String keyword : keywords) {
+                addKeyword(weighted, seen, keyword, 3);
+            }
+        }
+        return searchWithKeywords(config, resolveRoot(config), weighted, targetFileRelative);
+    }
+
+    private static Path resolveRoot(AgentConfig config) {
+        Path root = config.searchJavaRoot() != null ? config.searchJavaRoot() : config.existingJavaRoot();
+        return root == null ? null : root.toAbsolutePath().normalize();
+    }
+
+    private static SimilarCodeResult searchWithKeywords(AgentConfig config, Path root,
+                                                        Map<String, Integer> keywords,
+                                                        String targetFileRelative) {
         if (root == null || !Files.isDirectory(root)) {
             return new SimilarCodeResult(root, Collections.<SimilarCodeSnippet>emptyList(),
                     new ArrayList<String>(keywords.keySet()), 0,

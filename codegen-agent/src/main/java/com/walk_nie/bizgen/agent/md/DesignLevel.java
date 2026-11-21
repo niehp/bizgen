@@ -8,8 +8,8 @@ public enum DesignLevel {
 
     JAVA_COMMON("01-java-common", "Java共通"),
     PROJECT_COMMON("02-project-common", "プロジェクト共通"),
-    FEATURE("03-feature", "機能"),
-    JAVA_CLASS("04-java-class", "Javaクラス"),
+    USECASE("03-usecase", "ユースケース"),
+    JAVA_CLASS("04-java-class", "クラス"),
     METHOD("05-method", "メソッド");
 
     private final String folder;
@@ -51,8 +51,12 @@ public enum DesignLevel {
         if (value.equals("project-common") || value.equals("projectcommon")) {
             return PROJECT_COMMON;
         }
+        if (value.equals("usecase") || value.equals("use-case") || value.equals("ユースケース")) {
+            return USECASE;
+        }
+        // 後方互換: 旧 "feature/機能" トークンも受け付ける
         if (value.equals("feature") || value.equals("機能")) {
-            return FEATURE;
+            return USECASE;
         }
         if (value.equals("class") || value.equals("java-class") || value.equals("javaclass")) {
             return JAVA_CLASS;

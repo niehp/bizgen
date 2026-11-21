@@ -1,5 +1,7 @@
 package com.walk_nie.bizgen.agent.llm;
 
+import com.walk_nie.bizgen.agent.agent.ToolCall;
+import com.walk_nie.bizgen.agent.agent.ToolDefinition;
 import com.walk_nie.bizgen.agent.json.Json;
 import com.walk_nie.bizgen.agent.util.StrUtil;
 
@@ -8,7 +10,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** OpenAI 互換 /v1/chat/completions のリクエスト。 */
+/** OpenAI 互換 /v1/chat/completions のリクエスト。function tool 定義も保持する。 */
 public final class LlmRequest {
 
     private final String model;
@@ -16,14 +18,21 @@ public final class LlmRequest {
     private final double temperature;
     private final int maxTokens;
     private final Integer seed;
+    private final List<ToolDefinition> tools;
 
     public LlmRequest(String model, List<LlmMessage> messages, double temperature,
                       int maxTokens, Integer seed) {
+        this(model, messages, temperature, maxTokens, seed, new ArrayList<ToolDefinition>());
+    }
+
+    public LlmRequest(String model, List<LlmMessage> messages, double temperature,
+                      int maxTokens, Integer seed, List<ToolDefinition> tools) {
         this.model = model;
         this.messages = messages == null ? new ArrayList<LlmMessage>() : messages;
         this.temperature = temperature;
         this.maxTokens = maxTokens;
         this.seed = seed;
+        this.tools = tools == null ? new ArrayList<ToolDefinition>() : tools;
     }
 
     public String model() {
@@ -46,16 +55,31 @@ public final class LlmRequest {
         return seed;
     }
 
+    public List<ToolDefinition> tools() {
+        return tools;
+    }
+
     /** 実際にモデルへ渡す内容を可視化する（プレビュー / 監査用）。 */
     public String describe() {
         StringBuilder out = new StringBuilder();
         out.append("model: ").append(model).append('\n');
         out.append("temperature: ").append(temperature)
                 .append(" / maxTokens: ").append(maxTokens)
-                .append(" / seed: ").append(seed).append("\n\n");
+                .append(" / seed: ").append(seed).append('\n');
+        if (!tools.isEmpty()) {
+            out.append("tools: ");
+            for (ToolDefinition definition : tools) {
+                out.append(definition.name()).append(' ');
+            }
+            out.append('\n');
+        }
+        out.append('\n');
         for (LlmMessage message : messages) {
             out.append("===== [").append(message.role().toUpperCase()).append("] =====\n");
             out.append(message.content()).append('\n');
+            for (ToolCall call : message.toolCalls()) {
+                out.append("  tool_call: ").append(call.describe()).append('\n');
+            }
         }
         return out.toString();
     }
@@ -73,9 +97,33 @@ public final class LlmRequest {
             Map<String, Object> item = new LinkedHashMap<String, Object>();
             item.put("role", message.role());
             item.put("content", StrUtil.normalizeNewline(message.content()));
+            if (!message.toolCallId().isEmpty()) {
+                item.put("tool_call_id", message.toolCallId());
+            }
+            if (message.hasToolCalls()) {
+                List<Object> calls = new ArrayList<Object>();
+                for (ToolCall call : message.toolCalls()) {
+                    Map<String, Object> function = new LinkedHashMap<String, Object>();
+                    function.put("name", call.name());
+                    function.put("arguments", Json.stringify(call.arguments()));
+                    Map<String, Object> wrapper = new LinkedHashMap<String, Object>();
+                    wrapper.put("id", call.id());
+                    wrapper.put("type", "function");
+                    wrapper.put("function", function);
+                    calls.add(wrapper);
+                }
+                item.put("tool_calls", calls);
+            }
             serializedMessages.add(item);
         }
         root.put("messages", serializedMessages);
+        if (!tools.isEmpty()) {
+            List<Object> serializedTools = new ArrayList<Object>();
+            for (ToolDefinition definition : tools) {
+                serializedTools.add(definition.toJsonObject());
+            }
+            root.put("tools", serializedTools);
+        }
         return Json.stringify(root);
     }
 }
