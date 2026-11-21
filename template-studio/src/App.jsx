@@ -9,12 +9,14 @@ import OutputPanel from './components/OutputPanel.jsx';
 import DbStudio from './db/DbStudio.jsx';
 import ExcelStudio from './excel/ExcelStudio.jsx';
 import JavaStudio from './java/JavaStudio.jsx';
+import PageItemStudio from './pageitem/PageItemStudio.jsx';
 
 const viewFromHash = () => {
   const hash = window.location.hash.replace(/^#\/?/, '');
   if (hash === 'db') return 'db';
   if (hash === 'excel' || hash === 'mapping') return 'excel';
   if (hash === 'java' || hash === 'code') return 'java';
+  if (hash === 'pageitem' || hash === 'pageitem-excel') return 'pageitem';
   return 'template';
 };
 
@@ -55,7 +57,7 @@ export default function App() {
   const [values, setValues] = useState({});
   const [transforms, setTransforms] = useState({});
   const [expansions, setExpansions] = useState({});
-  const [table, setTable] = useState(null);
+  const [table, setTable] = useState({ enabled: true, rows: [] });
   const [keepFirstCase, setKeepFirstCase] = useState(false);
   const [result, setResult] = useState(EMPTY_RESULT);
   const [status, setStatus] = useState({ type: 'info', text: '準備中…' });
@@ -71,7 +73,8 @@ export default function App() {
   const go = useCallback((next) => {
     window.location.hash = next === 'db' ? '#db'
       : next === 'excel' ? '#excel'
-        : next === 'java' ? '#java' : '#template';
+        : next === 'java' ? '#java'
+          : next === 'pageitem' ? '#pageitem' : '#template';
     setView(next);
   }, []);
 
@@ -90,8 +93,8 @@ export default function App() {
     setValues({});
     setTransforms({});
     setExpansions({});
-    // null は「テンプレートから TABLE の初期行を読み込む」合図
-    setTable(null);
+    // 初期行のシードは廃止。テンプレート切替時は空の TABLE から始める。
+    setTable({ enabled: true, rows: [] });
   }, []);
 
   useEffect(() => {
@@ -114,7 +117,8 @@ export default function App() {
     })();
   }, [refresh, loadTemplate]);
 
-  // テンプレート変更 → 変数を自動抽出し、既入力値を保持したまま既定値を補う
+  // 模板变化 → 自动抽取变量。为什么保留已输入的值：改模板时用户往往只想增删个别变量，
+  // 全部清空会丢失已完成的工作；这里只对新变量补默认值，旧值原样沿用（300ms 防抖避免逐字请求）。
   useEffect(() => {
     if (!template.trim()) {
       setExtraction(EMPTY_EXTRACTION);
@@ -152,10 +156,6 @@ export default function App() {
           }
           return next;
         });
-        // TABLE はテンプレート切替時のみシードし、編集中の行は保持する
-        setTable((prev) => prev == null
-          ? { enabled: r.table?.enabled !== false, rows: r.table?.rows || [] }
-          : prev);
       } catch (e) {
         if (!cancelled) setStatus({ type: 'error', text: e.message });
       }
@@ -163,7 +163,8 @@ export default function App() {
     return () => { cancelled = true; clearTimeout(timer); };
   }, [template]);
 
-  // 変数値の変更 → リアルタイムにコード生成
+  // 变量/表格任一变化 → 实时重算结果。为什么用防抖 + 序号取消：
+  // 连续输入时避免每个字符都发请求，且丢弃过期响应，防止旧结果覆盖新结果。
   useEffect(() => {
     if (!template.trim()) return;
     let cancelled = false;
@@ -182,33 +183,16 @@ export default function App() {
     return () => { cancelled = true; clearTimeout(timer); };
   }, [template, values, transforms, expansions, keepFirstCase, table]);
 
-  const handleValue = useCallback((n, v) => {
-    setValues((prev) => ({ ...prev, [n]: v }));
-  }, []);
-
-  const handleTransform = useCallback((n, spec) => {
-    setTransforms((prev) => ({ ...prev, [n]: spec }));
-  }, []);
-
-  const handleExpansion = useCallback((n, cfg) => {
-    setExpansions((prev) => ({ ...prev, [n]: cfg }));
-  }, []);
-
   const handleTableChange = useCallback((next) => {
     setTable(next);
   }, []);
 
-  // ファイル取込で「1 行目を単一値に反映」を選んだとき、各変数の既定値を上書きする
+  // 文件导入若选择「首行作为单值」，用它覆盖各变量默认值，供 TABLE 空栏回退
   const handleImportValues = useCallback((patch) => {
     setValues((prev) => ({ ...prev, ...patch }));
   }, []);
 
   const toDefault = (v) => (v.type === 'boolean' ? v.default === 'true' : v.default);
-
-  const handleReset = useCallback((n) => {
-    const v = extraction.variables.find((x) => x.name === n);
-    if (v) setValues((prev) => ({ ...prev, [n]: toDefault(v) }));
-  }, [extraction.variables]);
 
   const handleResetAll = useCallback(() => {
     const next = {};
@@ -242,7 +226,7 @@ export default function App() {
     setName('無題テンプレート');
     setTemplate(STARTER);
     setValues({});
-    setTable(null);
+    setTable({ enabled: true, rows: [] });
     setStatus({ type: 'info', text: '新規テンプレート。編集後に保存してください' });
   };
 
@@ -292,6 +276,11 @@ export default function App() {
             className={`nav-item ${view === 'java' ? 'active' : ''}`}
             onClick={() => go('java')}
           >Java 代码索引 / 检索</button>
+          <button
+            type="button"
+            className={`nav-item ${view === 'pageitem' ? 'active' : ''}`}
+            onClick={() => go('pageitem')}
+          >页面项目 → Maskat widget</button>
         </nav>
 
         {view === 'template' ? <div className="topbar-actions">
@@ -329,7 +318,9 @@ export default function App() {
                 ? 'Excel 取込 → 列マッピング JSON → INSERT SQL（1 テーブル = 1 JSON）'
                 : view === 'java'
                   ? 'JAR / 全ファイル → SQLite + FTS5 索引 → 9 項目検索（増分スキャン · 多階層 Group · 包名/后缀/大小写/数据源过滤）'
-                  : 'テンプレート入力 → 変数を TABLE で入力 → 全件のコードを表示（6 種類の命名規則変数を自動生成）'}
+                  : view === 'pageitem'
+                    ? '图片/剪贴板 → 项目名 TOP LEFT WIDTH · Excel 双 Sheet → widget 列表 → Maskat widget（/maskat-spec 驱动 · 自动保存 JSON）'
+                    : 'テンプレート入力 → 変数を TABLE で入力 → 全件のコードを表示（6 種類の命名規則変数を自動生成）'}
           </span>
         </div>}
       </header>
@@ -337,7 +328,8 @@ export default function App() {
       {view === 'db' ? <DbStudio onStatus={setStatus} />
         : view === 'excel' ? <ExcelStudio onStatus={setStatus} />
           : view === 'java' ? <JavaStudio onStatus={setStatus} />
-            : <main className="workspace">
+            : view === 'pageitem' ? <PageItemStudio onStatus={setStatus} />
+              : <main className="workspace">
         <TemplateEditor template={template} onChange={setTemplate} extraction={extraction} />
         <VariableForm
           variables={extraction.variables}
@@ -351,10 +343,6 @@ export default function App() {
           table={table}
           onTableChange={handleTableChange}
           onImportValues={handleImportValues}
-          onChange={handleValue}
-          onTransformChange={handleTransform}
-          onExpansionChange={handleExpansion}
-          onReset={handleReset}
           onResetAll={handleResetAll}
         />
         <OutputPanel result={result} />

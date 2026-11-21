@@ -30,7 +30,9 @@ const HELP = `Java 代码索引 / 全文检索 CLI（与 Web 端共用 SQLite �
 
 search 选项：
   --mode <fuzzy|regex|fulltext>   检索模式（默认 fuzzy）
-  --fields <字段,字段>            包名,类名,字段名,方法名,方法内容,包注释,类注释,方法注释,字段注释
+  --fields <字段,字段>            中文名或 key：包名/packageName、类名/className、字段名/fieldName、
+                                 方法名/methodName、方法内容/methodContent、包注释/packageComment、
+                                 类注释/classComment、方法注释/methodComment、字段注释/fieldComment
   --ext <后缀>                    文件名后缀过滤，如 "*.java,*.xml"
   --package <包名>                包名过滤，支持 * 通配符，如 "com.example.*"
   --case-sensitive                区分大小写（三种模式均生效）
@@ -108,12 +110,30 @@ function cmdScan(opt) {
   }, opt);
 }
 
+// CLI 允许直接使用中文 / 日文字段名；映射到后端字段 key，与 Web 端保持一致
+const FIELD_ALIASES = {
+  包名: 'packageName', パッケージ名: 'packageName',
+  类名: 'className', クラス名: 'className',
+  字段名: 'fieldName', フィールド名: 'fieldName',
+  方法名: 'methodName', メソッド名: 'methodName',
+  方法内容: 'methodContent', メソッド内容: 'methodContent',
+  包注释: 'packageComment', 包コメント: 'packageComment',
+  类注释: 'classComment', クラスコメント: 'classComment',
+  方法注释: 'methodComment', メソッドコメント: 'methodComment',
+  字段注释: 'fieldComment', フィールドコメント: 'fieldComment',
+};
+const VALID_FIELDS = new Set(store.FIELDS.map((f) => f.key));
+
 function cmdSearch(opt) {
   const query = opt._.slice(0).join(' ');
   if (!query.trim()) throw new Error('请输入检索关键词');
-  const fields = opt.fields
-    ? opt.fields.split(/[,，]/).map((s) => s.trim()).filter(Boolean)
-    : undefined;
+  let fields;
+  if (opt.fields) {
+    const requested = opt.fields.split(/[,，]/).map((s) => s.trim()).filter(Boolean);
+    const unknown = requested.filter((f) => !VALID_FIELDS.has(f) && !FIELD_ALIASES[f]);
+    if (unknown.length) throw new Error(`未知检索字段：${unknown.join(', ')}（可选：${store.FIELDS.map((f) => `${f.label}/${f.key}`).join('、')}）`);
+    fields = [...new Set(requested.map((f) => (VALID_FIELDS.has(f) ? f : FIELD_ALIASES[f])))];
+  }
   const result = store.search({
     query,
     mode: opt.mode || 'fuzzy',

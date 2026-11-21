@@ -391,7 +391,13 @@ body {
 .table-tool-panel .control-area { font-size: 11px; }
 
 .table-scroll {
-  max-height: 290px; overflow: auto;
+  /* 为什么要 600px：TABLE 默认有 10 行输入行，原来 290px 只能露出约 5 行，
+     第 6~10 行被滚动区藏在视口外，用户看不到要填的格子。
+     600px ≈ 10 行 + 表头的高度，让 10 行一眼看全；超过 10 行仍可滚动，
+     避免导入大量数据时把整页撑得过长。 */
+  /* min-height 保证数据不足 10 行时高度也不塌陷，始终是「10 行输入网格」的观感 */
+  min-height: 470px;
+  max-height: 600px; overflow: auto;
   border: 1px solid var(--border); border-radius: 7px; background: var(--surface);
 }
 .tbl { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 560px; font-size: 11px; }
@@ -862,6 +868,30 @@ body {
   flex: none; font-size: 9px; color: var(--blue); background: var(--blue-soft);
   border-radius: 3px; padding: 1px 4px;
 }
+/* 二级检索：在一级结果内再过滤 */
+.java-narrow {
+  margin: 10px 0 4px; padding: 9px 10px; border: 1px solid var(--border);
+  border-radius: 7px; background: var(--surface-soft);
+}
+.java-narrow-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.java-narrow-title { font-size: 11px; font-weight: 600; color: var(--text); }
+.java-narrow-row { display: flex; flex-direction: column; gap: 6px; }
+.java-narrow-input { width: 100%; font-family: var(--mono); font-size: 11px; padding: 6px 8px; }
+.java-narrow-modes { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.java-narrow-cs { font-size: 11px; color: var(--muted); }
+.java-narrow-hint { font-size: 10px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+/* 检索来源：JAR / 文件夹两大分组，组内仍按多级 Group 折叠 */
+.java-kind-group { border: 1px solid var(--border); border-radius: 7px; margin-bottom: 6px; overflow: hidden; }
+.java-kind-group.java-kind-off { opacity: 0.5; }
+.java-kind-group-head {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 7px; background: var(--surface-soft);
+}
+.java-kind-group-head .java-check { flex: none; }
+.java-kind-group-head .java-kind-count { margin-left: 2px; }
+.java-kind-group-body { padding: 4px 6px 6px; }
+.java-source-check { flex: none; width: 13px; height: 13px; margin: 0; }
+.java-all-sources { width: 100%; margin: 6px 0; }
 
 /* 数据源分组 / 增量扫描 / 全文查看 */
 .java-group-field { display: flex; flex-direction: column; gap: 4px; font-size: 10px; color: var(--hint); margin-bottom: 8px; }

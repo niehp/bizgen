@@ -13,6 +13,17 @@ import * as dbmeta from './dbmeta.js';
 import * as mappings from './mapping.js';
 import * as presets from './preset.js';
 import * as javaIndex from './java-store.js';
+// page-item-studio 整合：图片解析 / Excel 设计书 → Maskat widget。
+// 这些模块无第三方依赖（纯 Node），复用同一个 Express 实例与 3001 端口即可。
+import { parseImageDataUrl, IMAGE_LIMITS } from './imagedata.js';
+import { parseImage, llmStatus } from './vision.js';
+import { UNITS, CONTROL_CLASSES, WIDGET_TYPES } from '../shared/layout.js';
+import {
+  DEFAULT_WIDGET_RULES, MASKAT_NOTE, SPEC_META, WIDGET_SCHEMA,
+  availableTags, buildMaskatBundle,
+} from '../shared/maskat.js';
+import { parseExcelSheets, EXCEL_LIMITS } from './excel.js';
+import { widgetsFromExcel } from '../shared/excel-widgets.js';
 import {
   listTemplates,
   getTemplate,
@@ -255,6 +266,13 @@ app.get('/api/java/sources', wrap(() => ({
   groups: javaIndex.listGroups(),
 })));
 
+app.get('/api/java/facets', wrap((req) => javaIndex.facets({
+  sourceKinds: String(req.query.kinds || '').split(',').map((s) => s.trim()).filter(Boolean),
+  sourceIds: String(req.query.sourceIds || '').split(',').map((s) => s.trim()).filter(Boolean),
+  sourceId: String(req.query.sourceId || ''),
+  sourceGroup: String(req.query.group || ''),
+})));
+
 app.get('/api/java/files', wrap((req) => ({
   files: javaIndex.sourceFiles(String(req.query.sourceId || '')),
 })));
@@ -298,6 +316,96 @@ app.get('/api/java/entries/:id', wrap((req) => javaIndex.getEntry(
   req.params.id, Number(req.query.context || 6), String(req.query.q || ''),
   req.query.cs === '1' || req.query.cs === 'true',
 )));
+
+/* ---------------- page-item-studio 整合：画像 / Excel → Maskat widget ---------------- */
+
+// 页面需要处理的用户选项、spec 元信息与可用标签一次性下发，避免前端重复实现规则。
+app.get('/api/config', wrap(() => ({
+  llm: llmStatus(),
+  units: UNITS,
+  limits: IMAGE_LIMITS,
+  excelLimits: EXCEL_LIMITS,
+  maskat: {
+    note: MASKAT_NOTE,
+    specMeta: SPEC_META,
+    specDir: '/maskat-spec',
+    controlClasses: CONTROL_CLASSES,
+    widgetTypes: WIDGET_TYPES,
+    defaultRules: DEFAULT_WIDGET_RULES,
+    availableTags: availableTags(),
+    widgetSchema: WIDGET_SCHEMA,
+  },
+})));
+
+// 图片 dataURL → 视觉模型解析 → 项目名 + TOP/LEFT/WIDTH + 控件分类。
+app.post('/api/parse', wrapAsync(async (req) => {
+  const body = req.body || {};
+  let image;
+  try {
+    image = parseImageDataUrl(body.image);
+  } catch (e) {
+    e.code = 'BAD_IMAGE';
+    throw e;
+  }
+  const meta = {
+    name: String(body.filename || 'pasted-image').slice(0, 200),
+    width: image.width,
+    height: image.height,
+    mime: image.mime,
+    dataUrl: image.dataUrl,
+  };
+  const result = await parseImage({ image: meta, llm: body.llm || {}, options: body.options || {} });
+  return {
+    image: { name: meta.name, width: meta.width, height: meta.height, mime: meta.mime, bytes: image.bytes },
+    items: result.items,
+    dropped: result.dropped,
+    meta: result.meta,
+  };
+}));
+
+// Excel「画面項目」「画面レイアウト」两表 → widget 列表。
+app.post('/api/excel/widgets', wrap((req) => {
+  const body = req.body || {};
+  let parsed;
+  try {
+    parsed = parseExcelSheets(body.file, String(body.filename || 'book.xlsx'));
+  } catch (e) {
+    e.code = 'BAD_EXCEL';
+    throw e;
+  }
+  const result = widgetsFromExcel(parsed.sheets);
+  return {
+    ...result,
+    warnings: [...parsed.warnings, ...result.warnings],
+    filename: String(body.filename || '').slice(0, 200),
+  };
+}));
+
+// 内置示例设计书（零文件时演示用）。
+app.get('/api/excel/sample', wrap(() => {
+  const p = path.join(__dirname, '..', 'samples', '画面設計書サンプル.xlsx');
+  if (!fs.existsSync(p)) throw new Error('示例文件不存在，请运行 node scripts/make-sample-excel.mjs');
+  return { filename: '画面設計書サンプル.xlsx', file: fs.readFileSync(p).toString('base64') };
+}));
+
+// 程序化生成 Maskat 四件套（layout.xml / widgets.json / event.xml / page.js）。
+app.post('/api/maskat/build', wrap((req) => {
+  const body = req.body || {};
+  if (!Array.isArray(body.items)) throw new Error('items 必须是数组');
+  const bundle = buildMaskatBundle({
+    items: body.items.slice(0, 2000),
+    image: body.image || {},
+    rules: body.rules || DEFAULT_WIDGET_RULES,
+    options: body.options || {},
+  });
+  return {
+    image: body.image || {},
+    stats: bundle.stats,
+    warnings: bundle.warnings,
+    widgetCount: bundle.widgets.length,
+    files: bundle.files,
+  };
+}));
 
 // 未定義の API は SPA の index.html を返さず、JSON 404 を返す。
 // こうすると旧クライアント/旧サーバーが混在しても res.json() が失敗せず、

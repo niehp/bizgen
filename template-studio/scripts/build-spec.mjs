@@ -1,0 +1,161 @@
+/**
+ * 由 maskat-spec/bindingConfiguration_*.txt 生成可执行的 widget 预设与 schema。
+ *
+ *   node scripts/build-spec.mjs      （npm run spec）
+ *
+ * 产物（全部放在 /maskat-spec）：
+ *   widget-schema.json  85 个 widget 的完整属性定义（人读 / 程序消费）
+ *   widget-rules.json   控件分类 → 真实 widget 标签 + 必填属性 + 事件属性（可编辑预设）
+ *   widget-rules.js     同上，ESM 常量，供 shared / server / 前端直接 import
+ */
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { loadSpec } from '../server/spec-loader.js';
+import { WIDGET_TYPES, CONTROL_CLASSES } from '../shared/layout.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.join(__dirname, '..');
+const SPEC_DIR = path.join(ROOT, 'maskat-spec');
+
+/** 抽象控件类型 → Maskat 真实标签（按 spec 语义挑选，标签必须存在于 schema） */
+const WIDGET_TO_TAG = {
+  text: 'textBox',
+  number: 'numberTextBox',
+  date: 'dateTextBox',
+  password: 'textBox',
+  textarea: 'textarea',
+  select: 'filteringSelect',
+  radio: 'radioButton',
+  checkbox: 'checkBox',
+  list: 'selectBox',
+  label: 'label',
+  button: 'button',
+  header: 'headerLabel',
+  title: 'label',
+  grid: 'grid',
+  static: 'readTextBox',
+};
+
+/** 必填属性的自动补全策略：从 Excel / 图片数据里取不到时给出合理默认 */
+const REQUIRED_FILLER = {
+  field: { from: 'id', hint: '数据绑定字段名，默认用 widget ID' },
+  maxlength: { value: '100', hint: '最大输入长度' },
+  group: { from: 'label', fallback: 'defaultGroup', hint: '单选按钮组名' },
+  text: { from: 'name', hint: '标签显示文字' },
+  name: { from: 'id', hint: 'widget 名' },
+  top: { from: 'top', hint: '上边距' },
+  left: { from: 'left', hint: '左边距' },
+  width: { from: 'width', hint: '宽度' },
+  height: { from: 'height', hint: '高度' },
+};
+
+const CONTROL_BY_ID = Object.fromEntries(CONTROL_CLASSES.map((c) => [c.id, c]));
+
+const spec = loadSpec(SPEC_DIR);
+
+/** 精简 schema（供前端 import，避免把完整属性细节打进 bundle） */
+const compactSchema = {};
+for (const [tag, w] of Object.entries(spec.widgets)) {
+  compactSchema[tag] = {
+    tag,
+    className: w.className,
+    extend: w.extend,
+    attributes: w.attributeNames,
+    required: w.requiredAttributes,
+    defaults: Object.fromEntries(
+      Object.entries(w.attributes)
+        .filter(([, a]) => a.defaultValue !== undefined && typeof a.defaultValue !== 'object')
+        .map(([n, a]) => [n, a.defaultValue]),
+    ),
+    eventAttributes: w.eventAttributes,
+    children: w.children,
+    positionable: w.positionable,
+    source: w.source,
+  };
+}
+
+const rules = [];
+const warnings = [];
+for (const w of WIDGET_TYPES) {
+  const tag = WIDGET_TO_TAG[w.id] || w.id;
+  const def = spec.widgets[tag];
+  if (!def) {
+    warnings.push(`「${w.id}」映射的 Maskat 标签 <${tag}> 不在 spec 中，已回退为 <label>`);
+  }
+  const realTag = def ? tag : 'label';
+  const d = spec.widgets[realTag] || { attributeNames: [], requiredAttributes: [], eventAttributes: [] };
+  const required = d.requiredAttributes.filter((a) => !['top', 'left', 'width', 'height', 'name'].includes(a));
+  rules.push({
+    widget: w.id,
+    label: w.label,
+    control: w.control,
+    tag: realTag,
+    className: d.className || '',
+    // 用户可编辑的额外属性（紧凑写法）。初始只放 spec 的必填项占位
+    attrs: Object.fromEntries(required.map((a) => [a, REQUIRED_FILLER[a]?.value || ''])),
+    spec: {
+      requiredAttributes: d.requiredAttributes,
+      attributeNames: d.attributeNames,
+      eventAttributes: d.eventAttributes,
+      defaults: Object.fromEntries(
+        Object.entries(d.attributes)
+          .filter(([, a]) => a.defaultValue !== undefined && typeof a.defaultValue !== 'object')
+          .map(([n, a]) => [n, a.defaultValue]),
+      ),
+      children: d.children,
+      source: d.source,
+    },
+    enabled: true,
+    focusable: CONTROL_BY_ID[w.control] ? w.control !== 'other' || w.id === 'button' : false,
+  });
+}
+
+const meta = {
+  generatedAt: new Date().toISOString(),
+  sourceFiles: spec.fileStats,
+  tagCount: spec.tagCount,
+  positionableCount: spec.positionableTags.length,
+  layoutStructure: {
+    root: 'layoutDef',
+    children: spec.widgets.layoutDef?.children || [],
+    layout: {
+      attributes: spec.widgets.layout?.attributeNames || [],
+      required: spec.widgets.layout?.requiredAttributes || [],
+      children: spec.widgets.layout?.children || [],
+    },
+  },
+  eventStructure: {
+    root: 'eventDef',
+    children: spec.widgets.eventDef?.children || [],
+    component: {
+      attributes: spec.widgets.component?.attributeNames || [],
+      children: spec.widgets.component?.children || [],
+    },
+    event: {
+      attributes: spec.widgets.event?.attributeNames || [],
+      required: spec.widgets.event?.requiredAttributes || [],
+    },
+  },
+  warnings,
+};
+
+const json = (v) => `${JSON.stringify(v, null, 2)}\n`;
+fs.writeFileSync(path.join(SPEC_DIR, 'widget-schema.json'), json({
+  meta,
+  widgets: spec.widgets,
+}), 'utf8');
+fs.writeFileSync(path.join(SPEC_DIR, 'widget-rules.json'), json({ meta, rules }), 'utf8');
+fs.writeFileSync(path.join(SPEC_DIR, 'widget-rules.js'),
+  `// AUTO-GENERATED by scripts/build-spec.mjs — 请勿直接编辑；改完 txt 后运行 npm run spec\n`
+  + `export const SPEC_META = ${JSON.stringify(meta, null, 2)};\n\n`
+  + `export const WIDGET_SCHEMA = ${JSON.stringify(compactSchema, null, 2)};\n\n`
+  + `export const DEFAULT_WIDGET_RULES = ${JSON.stringify(rules, null, 2)};\n`,
+  'utf8');
+
+console.log('[maskat-spec] 已生成:');
+console.log(`  widget-schema.json  (${spec.tagCount} widgets / ${spec.positionableTags.length} positionable)`);
+console.log(`  widget-rules.json   (${rules.length} rules)`);
+console.log('  widget-rules.js');
+console.log('  来源:', spec.fileStats.map((f) => `${f.file}(${f.definitions})`).join(', '));
+if (warnings.length) console.log('  警告:', warnings.join(' / '));

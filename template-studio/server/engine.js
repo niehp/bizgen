@@ -15,7 +15,6 @@ import {
 } from '../shared/casevars.js';
 import {
   pickGenerator,
-  seedTableConfig,
   normalizeTable,
   tableOverrides,
   tableLabel,
@@ -238,7 +237,6 @@ export function extract(template) {
     variables,
     caseVars: { ...caseVars },
     derivedVariables,
-    table: seedTableConfig(meta, variables),
     meta: {
       title: meta.title ? String(meta.title) : '',
       description: meta.description ? String(meta.description) : '',

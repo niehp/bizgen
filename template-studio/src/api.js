@@ -110,6 +110,16 @@ export const listJavaSources = () => request('/java/sources');
 export const listJavaFiles = (sourceId) =>
   request(`/java/files?sourceId=${encodeURIComponent(sourceId)}`);
 
+export const getJavaFacets = ({ sourceKinds, sourceIds, sourceId, sourceGroup } = {}) => {
+  const q = new URLSearchParams();
+  if (sourceKinds?.length) q.set('kinds', sourceKinds.join(','));
+  if (sourceIds?.length) q.set('sourceIds', sourceIds.join(','));
+  if (sourceId) q.set('sourceId', sourceId);
+  if (sourceGroup) q.set('group', sourceGroup);
+  const qs = q.toString();
+  return request('/java/facets' + (qs ? '?' + qs : ''));
+};
+
 export const deleteJavaSource = (id) =>
   request(`/java/sources/${encodeURIComponent(id)}`, { method: 'DELETE' });
 

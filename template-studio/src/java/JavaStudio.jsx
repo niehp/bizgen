@@ -1,22 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   listJavaSources, listJavaFiles, deleteJavaSource,
   scanJavaFolder, scanJavaJar, scanJavaPath,
-  searchJava, getJavaEntry, setJavaSourceGroup, setJavaSourceName, renameJavaGroup, getJavaFileContent,
+  searchJava, getJavaEntry, setJavaSourceGroup, setJavaSourceName, renameJavaGroup,
+  getJavaFileContent, getJavaFacets,
 } from '../api.js';
 
-const SEARCH_FIELDS = [
-  { key: 'packageName', label: '包名' },
-  { key: 'className', label: '类名' },
-  { key: 'fieldName', label: '字段名' },
-  { key: 'methodName', label: '方法名' },
-  { key: 'methodContent', label: '方法内容' },
-  { key: 'packageComment', label: '包注释' },
-  { key: 'classComment', label: '类注释' },
-  { key: 'methodComment', label: '方法注释' },
-  { key: 'fieldComment', label: '字段注释' },
-];
-const ALL_FIELDS = SEARCH_FIELDS.map((f) => f.key);
 const SOURCE_KINDS = [
   { id: 'jar', label: 'JAR 索引（SQLite）' },
   { id: 'folder', label: '文件夹（全文索引）' },
@@ -52,7 +41,6 @@ export default function JavaStudio({ onStatus }) {
   const [query, setQuery] = useState('');
   const [mode, setMode] = useState('fuzzy');
   const [logic, setLogic] = useState('or');
-  const [fields, setFields] = useState(ALL_FIELDS);
   const [caseSensitive, setCaseSensitive] = useState(false);
   const [contextLines, setContextLines] = useState(3);
   const [limit, setLimit] = useState(50);
@@ -69,8 +57,16 @@ export default function JavaStudio({ onStatus }) {
   const [editingGroupName, setEditingGroupName] = useState(null);
   const [groupNameDraft, setGroupNameDraft] = useState('');
   const [sourceIds, setSourceIds] = useState([]);
-  const [fileExtensions, setFileExtensions] = useState('');
+  const [facets, setFacets] = useState({ extensions: [], packages: [], groups: [] });
+  const [hasSearched, setHasSearched] = useState(false);
+  const lastAutoKey = useRef('');
+  const searchSeq = useRef(0);
+  const [fileNameFilter, setFileNameFilter] = useState('');
   const [packageFilter, setPackageFilter] = useState('');
+  // 二级检索：在一级结果内再过滤，不重新扫描索引
+  const [narrowQuery, setNarrowQuery] = useState('');
+  const [narrowMode, setNarrowMode] = useState('fuzzy');
+  const [narrowCaseSensitive, setNarrowCaseSensitive] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState([]);
   const jarInput = useRef(null);
   const folderInput = useRef(null);
@@ -114,6 +110,12 @@ export default function JavaStudio({ onStatus }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSource]);
 
+  // 检索条件指纹：任一输入变化都会触发联动重查（检索过一次后生效）
+  const autoDeps = JSON.stringify({
+    query, mode, logic, caseSensitive, fileNameFilter, packageFilter,
+    contextLines, limit, selectedSource, sourceIds, sourceKinds, sourceGroup,
+  });
+
   const runSearch = async (override = {}) => {
     // 索引库尚未加载时不传 sourceIds（后台按全部处理）；加载后按勾选过滤
     const effectiveSourceIds = override.sourceIds ?? (sources.length ? sourceIds : undefined);
@@ -121,9 +123,8 @@ export default function JavaStudio({ onStatus }) {
       query: override.query ?? query,
       mode: override.mode ?? mode,
       logic: override.logic ?? logic,
-      fields: override.fields ?? fields,
       caseSensitive: override.caseSensitive ?? caseSensitive,
-      fileExtensions: override.fileExtensions ?? fileExtensions,
+      fileNameFilter: override.fileNameFilter ?? fileNameFilter,
       packageFilter: override.packageFilter ?? packageFilter,
       contextLines: override.contextLines ?? contextLines,
       limit: override.limit ?? limit,
@@ -133,10 +134,14 @@ export default function JavaStudio({ onStatus }) {
       sourceGroup: override.sourceGroup ?? sourceGroup,
     };
     if (!payload.query.trim()) { tell('error', '请输入要检索的代码或注释'); return; }
+    setHasSearched(true);
+    lastAutoKey.current = autoDeps;
+    const seq = ++searchSeq.current;
     setSearching(true);
     setDetail(null);
     try {
       const r = await searchJava(payload);
+      if (seq !== searchSeq.current) return;
       setResults(r);
       const inc = r.refresh;
       const incText = inc && (inc.added || inc.removed || inc.archivesAdded || inc.archivesUpdated || inc.archivesRemoved)
@@ -144,11 +149,79 @@ export default function JavaStudio({ onStatus }) {
         : '';
       tell(r.total ? 'ok' : 'info', `命中 ${r.total} 条（扫描 ${r.scanned} 条索引记录）${incText}`);
     } catch (e) {
-      tell('error', e.message);
+      if (seq === searchSeq.current) tell('error', e.message);
     } finally {
-      setSearching(false);
+      if (seq === searchSeq.current) setSearching(false);
     }
   };
+
+  // 检索过一次后，任一条件变化自动重新检索（400ms 防抖，避免逐字触发）
+  useEffect(() => {
+    if (!hasSearched || !query.trim()) return undefined;
+    if (lastAutoKey.current === autoDeps) return undefined;
+    const timer = window.setTimeout(() => runSearch(), 400);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoDeps, hasSearched]);
+
+  // 检索来源（JAR / 文件夹）变化 → 联动数据源勾选、选中数据源与分组过滤
+  useEffect(() => {
+    const allowed = sources.filter((s) => sourceKinds.includes(s.kind)).map((s) => s.id);
+    setSourceIds((prev) => {
+      const next = prev.filter((id) => allowed.includes(id));
+      return next.length === prev.length ? prev : next;
+    });
+    if (selectedSource && !allowed.includes(selectedSource)) setSelectedSource('');
+    if (sourceGroup) {
+      const valid = sources.some((s) => allowed.includes(s.id)
+        && (s.group_name === sourceGroup || String(s.group_name || '').startsWith(sourceGroup + '/')));
+      if (!valid) setSourceGroup('');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceKinds, sources]);
+
+  // 来源 / 数据源 / 分组变化 → 联动后缀、包名、分组候选项
+  useEffect(() => {
+    let cancelled = false;
+    getJavaFacets({ sourceKinds, sourceIds, sourceId: selectedSource, sourceGroup })
+      .then((r) => { if (!cancelled) setFacets(r); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [
+    sourceKinds.join(','), sourceIds.join(','), selectedSource, sourceGroup, sources.length,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  ]);
+
+  // 二级检索：仅在一级结果集内再过滤，不重新扫描索引库
+  const visibleHits = useMemo(() => {
+    const all = results?.hits || [];
+    const q = narrowQuery.trim();
+    if (!q) return all;
+    let re = null;
+    if (narrowMode === 'regex') {
+      try { re = new RegExp(q, narrowCaseSensitive ? '' : 'i'); }
+      catch { return []; }
+    }
+    const tokens = narrowCaseSensitive ? q.split(/\s+/).filter(Boolean) : q.toLowerCase().split(/\s+/).filter(Boolean);
+    const textOf = (h) => [
+      h.packageName, h.className, h.fieldName, h.methodName, h.signature,
+      h.methodPreview, h.packageComment, h.classComment, h.methodComment, h.fieldComment,
+      h.fileName, h.path, h.sourceName,
+    ].filter(Boolean).join('\n');
+    if (re) return all.filter((h) => { re.lastIndex = 0; return re.test(textOf(h)); });
+    // 带空格：先按连续短语（压缩空白差异）匹配；无命中再回退多词 AND
+    const collapse = (s) => String(s ?? '').replace(/\s+/g, ' ');
+    const phrase = narrowCaseSensitive ? collapse(q) : collapse(q).toLowerCase();
+    const phraseHits = all.filter((h) => {
+      const text = collapse(textOf(h));
+      return (narrowCaseSensitive ? text : text.toLowerCase()).includes(phrase);
+    });
+    if (phraseHits.length) return phraseHits;
+    return all.filter((h) => {
+      const hay = narrowCaseSensitive ? textOf(h) : textOf(h).toLowerCase();
+      return tokens.every((t) => hay.includes(t));
+    });
+  }, [results, narrowQuery, narrowMode, narrowCaseSensitive]);
 
   const openDetail = async (id) => {
     setDetailLoading(true);
@@ -326,17 +399,24 @@ export default function JavaStudio({ onStatus }) {
     prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
   ));
 
-  const toggleField = (key) => setFields((prev) => (
-    prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+  const toggleSourceKind = (kind) => setSourceKinds((prev) => (
+    prev.includes(kind) ? prev.filter((x) => x !== kind) : [...prev, kind]
   ));
 
+  const setKindSelection = (kind, selected) => {
+    const ids = sources.filter((s) => s.kind === kind).map((s) => s.id);
+    setSourceIds((prev) => (selected
+      ? [...new Set([...prev, ...ids])]
+      : prev.filter((id) => !ids.includes(id))));
+  };
+
   // 多级分组：group_name 为 "父/子/孙" 路径，构建为可折叠的树
-  const groupTree = (() => {
+  const buildGroupTree = (list) => {
     const make = (name, p, renameFrom) => ({
       name, path: p, renameFrom, items: [], children: new Map(), sources: 0, entries: 0,
     });
     const root = make('', '', '');
-    for (const s of sources) {
+    for (const s of list) {
       const parts = String(s.group_name || '').split('/').map((x) => x.trim()).filter(Boolean);
       const segments = parts.length ? parts : ['未分组'];
       let node = root;
@@ -362,7 +442,13 @@ export default function JavaStudio({ onStatus }) {
     };
     rollup(root);
     return root;
-  })();
+  };
+  const groupTree = buildGroupTree(sources);
+  // 检索来源按 JAR / 文件夹分成两棵树，各自保留多级分类分组
+  const treesByKind = {
+    jar: buildGroupTree(sources.filter((s) => s.kind === 'jar')),
+    folder: buildGroupTree(sources.filter((s) => s.kind === 'folder')),
+  };
   const groupOptions = (() => {
     const paths = [];
     const walk = (node) => {
@@ -377,6 +463,13 @@ export default function JavaStudio({ onStatus }) {
   const renderSource = (s) => (
     <div key={s.id} className={`java-source-item ${selectedSource === s.id ? 'active' : ''}`}>
       <div className="java-source-row">
+        <input
+          type="checkbox"
+          className="java-source-check"
+          checked={sourceIds.includes(s.id)}
+          onChange={() => toggleSourceId(s.id)}
+          title="勾选后参与检索"
+        />
         {editingName === s.id ? (
           <input
             className="control java-name-edit"
@@ -426,8 +519,8 @@ export default function JavaStudio({ onStatus }) {
     </div>
   );
 
-  const renderGroup = (node, depth = 0) => {
-    const key = node.path || '__ungrouped__';
+  const renderGroup = (node, depth = 0, kindPrefix = '') => {
+    const key = `${kindPrefix}:${node.path || '__ungrouped__'}`;
     const collapsed = collapsedGroups.includes(key);
     return (
       <div key={key} className="java-group-block" style={{ marginLeft: depth * 10 }}>
@@ -464,7 +557,7 @@ export default function JavaStudio({ onStatus }) {
         {!collapsed && (
           <div className="java-group-body">
             {node.items.map(renderSource)}
-            {[...node.children.values()].map((child) => renderGroup(child, depth + 1))}
+            {[...node.children.values()].map((child) => renderGroup(child, depth + 1, kindPrefix))}
           </div>
         )}
       </div>
@@ -530,66 +623,59 @@ export default function JavaStudio({ onStatus }) {
           {busy && <div className="java-busy">{busy}</div>}
           <p className="java-hint">JAR 会扫描全部条目：.java 结构化解析，其他文本文件建立全文索引；扫描文件夹 / 路径覆盖所有文本文件与其中 JAR/ZIP，二进制自动跳过。路径扫描会自动登记，每次检索自动增量更新。</p>
 
-          <div className="java-section-title">检索来源（可多选，默认同时检索）</div>
+          <div className="java-section-title">
+            检索来源 · 按 JAR / 文件夹分组
+            <span className="badge badge-neutral">{sourceIds.length}/{sources.length} 参与检索</span>
+          </div>
           <div className="java-source-kinds">
-            {SOURCE_KINDS.map((k) => (
-              <label key={k.id} className="java-check java-kind-check">
-                <input
-                  type="checkbox"
-                  checked={sourceKinds.includes(k.id)}
-                  onChange={(e) => setSourceKinds((prev) => (
-                    e.target.checked ? [...prev, k.id] : prev.filter((x) => x !== k.id)
-                  ))}
-                />
-                {k.label}
-                <span className="java-kind-count">{stats.byKind[k.id] || 0}</span>
-              </label>
-            ))}
+            {SOURCE_KINDS.map((k) => {
+              const enabled = sourceKinds.includes(k.id);
+              const kindSources = sources.filter((s) => s.kind === k.id);
+              const picked = kindSources.filter((s) => sourceIds.includes(s.id)).length;
+              return (
+                <div key={k.id} className={`java-kind-group ${enabled ? '' : 'java-kind-off'}`}>
+                  <div className="java-kind-group-head">
+                    <label className="java-check java-kind-check">
+                      <input type="checkbox" checked={enabled} onChange={() => toggleSourceKind(k.id)} />
+                      {k.label}
+                      <span className="java-kind-count">{picked}/{kindSources.length}</span>
+                    </label>
+                    <button type="button" className="link-btn" disabled={!enabled || !kindSources.length}
+                      onClick={() => setKindSelection(k.id, true)}>全选</button>
+                    <button type="button" className="link-btn" disabled={!enabled || !kindSources.length}
+                      onClick={() => setKindSelection(k.id, false)}>清空</button>
+                  </div>
+                  {enabled && (
+                    <div className="java-kind-group-body">
+                      {[...treesByKind[k.id].children.values()].map((node) => renderGroup(node, 0, k.id))}
+                      {!kindSources.length && <div className="java-empty-mini">暂无该类型数据源</div>}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           <div className="java-section-title">按分组过滤（含子分组）</div>
           <select className="control java-group-filter" value={sourceGroup} onChange={(e) => setSourceGroup(e.target.value)}>
             <option value="">全部分组</option>
-            {groupOptions.map((g) => <option key={g} value={g}>{g}</option>)}
+            {[...new Set([...groupOptions, ...(facets.groups || [])])].map((g) => (
+              <option key={g} value={g}>{g}</option>
+            ))}
           </select>
 
-          <div className="java-section-title">按数据源过滤结果 <span className="badge badge-neutral">{sourceIds.length}/{sources.length}</span></div>
-          <div className="java-source-filter">
-            <label className="java-check java-check-all">
-              <input
-                type="checkbox"
-                checked={!!sources.length && sourceIds.length === sources.length}
-                onChange={(e) => setSourceIds(e.target.checked ? sources.map((s) => s.id) : [])}
-              />
-              全选数据源
-            </label>
-            {sources.map((s) => (
-              <label key={s.id} className="java-check java-source-filter-item">
-                <input type="checkbox" checked={sourceIds.includes(s.id)} onChange={() => toggleSourceId(s.id)} />
-                <span className="java-filter-source-name" title={s.name}>{s.name}</span>
-                <span className="java-filter-source-kind">{s.kind}</span>
-              </label>
-            ))}
-            {!sources.length && <div className="java-empty-mini">暂无数据源</div>}
-          </div>
+          <button
+            type="button"
+            className={`java-source-item java-all-sources ${selectedSource === '' ? 'active' : ''}`}
+            onClick={() => setSelectedSource('')}
+          >
+            <span className="java-source-name">全部数据源（不限定单一批次）</span>
+            <span className="java-source-meta">{stats.entries} 条</span>
+          </button>
 
           {!!roots.length && (
             <div className="java-roots-note">自动增量扫描路径：{roots.length} 个（每次检索自动更新）</div>
           )}
-
-          <div className="java-section-title">索引批次 · Group <span className="badge badge-neutral">{sources.length}</span></div>
-          <div className="java-source-list">
-            <button
-              type="button"
-              className={`java-source-item ${selectedSource === '' ? 'active' : ''}`}
-              onClick={() => setSelectedSource('')}
-            >
-              <span className="java-source-name">全部数据源</span>
-              <span className="java-source-meta">{stats.entries} 条</span>
-            </button>
-            {[...groupTree.children.values()].map((node) => renderGroup(node, 0))}
-            {!sources.length && <div className="java-empty-mini">暂无索引，先扫描一个 JAR 或源码文件夹</div>}
-          </div>
 
           {selectedSource && (
             <>
@@ -617,7 +703,7 @@ export default function JavaStudio({ onStatus }) {
           <div className="panel-head">
             <div>
               <h2>代码检索</h2>
-              <p className="panel-sub">输入代码段或注释，定位对应实现及其前后代码</p>
+              <p className="panel-sub">输入代码段或注释，定位对应实现及其前后代码 · 检索一次后条件变化自动重查</p>
             </div>
             <button type="button" className="btn btn-primary" onClick={() => runSearch()} disabled={searching}>
               {searching ? '检索中…' : '检索'}
@@ -653,20 +739,6 @@ export default function JavaStudio({ onStatus }) {
             </span>
           </div>
 
-          <div className="java-filter-row">
-            <span className="java-label">检索字段</span>
-            <button type="button" className="link-btn" onClick={() => setFields(ALL_FIELDS)}>全选</button>
-            <button type="button" className="link-btn" onClick={() => setFields([])}>清空</button>
-          </div>
-          <div className="java-field-grid">
-            {SEARCH_FIELDS.map((f) => (
-              <label key={f.key} className="java-check">
-                <input type="checkbox" checked={fields.includes(f.key)} onChange={() => toggleField(f.key)} />
-                {f.label}
-              </label>
-            ))}
-          </div>
-
           <div className="java-options-row">
             <label className="java-check">多词逻辑
               <select className="control" value={logic} onChange={(e) => setLogic(e.target.value)}>
@@ -678,18 +750,20 @@ export default function JavaStudio({ onStatus }) {
               <input type="checkbox" checked={caseSensitive} onChange={(e) => setCaseSensitive(e.target.checked)} />
               区分大小写
             </label>
-            <label className="java-check">后缀过滤
+            <label className="java-check">文件名过滤
               <input
-                className="control java-ext-input"
-                value={fileExtensions}
-                onChange={(e) => setFileExtensions(e.target.value)}
-                placeholder="*.java, *.xml"
+                className="control java-file-input"
+                list="java-file-candidates"
+                value={fileNameFilter}
+                onChange={(e) => setFileNameFilter(e.target.value)}
+                placeholder="*Service*.java"
                 spellCheck={false}
               />
             </label>
             <label className="java-check">包名过滤
               <input
                 className="control java-pkg-input"
+                list="java-pkg-candidates"
                 value={packageFilter}
                 onChange={(e) => setPackageFilter(e.target.value)}
                 placeholder="com.example.*"
@@ -709,16 +783,59 @@ export default function JavaStudio({ onStatus }) {
               </select>
             </label>
           </div>
-          <div className="java-ext-hint">后缀过滤支持 <code>*.java</code> / <code>.java</code> / <code>java</code>；包名过滤支持 <code>*</code> 通配符（如 <code>com.example.*</code>），多个用英文逗号分隔；留空表示不过滤。区分大小写对模糊 / 正则 / 全文三种模式均生效。</div>
+          <datalist id="java-file-candidates">
+            {(facets.fileNames || []).map((x) => <option key={x} value={x} />)}
+          </datalist>
+          <datalist id="java-pkg-candidates">
+            {(facets.packages || []).map((x) => <option key={x} value={x} />)}
+          </datalist>
+          <div className="java-ext-hint">
+            检索覆盖全部字段（包名 / 类名 / 字段名 / 方法名 / 方法内容 / 各类注释）。<b>关键字支持带空格</b>：词间空格按连续短语匹配（忽略空白差异），无结果时自动回退多词匹配；词首 / 词尾空格会自动忽略。文件名过滤按文件名匹配，支持 <code>*</code> 通配符（如 <code>*Service*.java</code>）；包名过滤支持 <code>*</code> 通配符（如 <code>com.example.*</code>）；多个值用英文逗号分隔，留空表示不过滤。区分大小写对模糊 / 正则 / 全文三种模式均生效。</div>
+
+          <div className="java-narrow">
+            <div className="java-narrow-head">
+              <span className="java-narrow-title">二级检索 · 在一级结果内再检索</span>
+              {results && narrowQuery.trim() && (
+                <span className="badge badge-blue">{visibleHits.length} / {results.hits.length} 条</span>
+              )}
+            </div>
+            <div className="java-narrow-row">
+              <input
+                className="control java-narrow-input"
+                value={narrowQuery}
+                onChange={(e) => setNarrowQuery(e.target.value)}
+                placeholder="在一级结果中继续过滤（代码 / 注释 / 文件名 / 类名 …）"
+                spellCheck={false}
+              />
+              <div className="java-narrow-modes">
+                {[{ id: 'fuzzy', label: '模糊' }, { id: 'regex', label: '正则' }].map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    className={`nav-pill ${narrowMode === m.id ? 'active' : ''}`}
+                    onClick={() => setNarrowMode(m.id)}
+                  >{m.label}</button>
+                ))}
+                <label className="java-check java-narrow-cs">
+                  <input type="checkbox" checked={narrowCaseSensitive} onChange={(e) => setNarrowCaseSensitive(e.target.checked)} />
+                  区分大小写
+                </label>
+                {!!narrowQuery && <button type="button" className="link-btn" onClick={() => setNarrowQuery('')}>清除</button>}
+              </div>
+            </div>
+            {results && narrowQuery.trim() && !visibleHits.length && (
+              <div className="java-narrow-hint">二级检索无命中：一级的 {results.hits.length} 条结果里没有符合的内容。可放宽二级条件或清除后重新检索。</div>
+            )}
+          </div>
 
           <div className="java-results-head">
-            <span>检索结果</span>
+            <span>检索结果{narrowQuery.trim() ? '（二级筛选后）' : ''}</span>
             {results && <span className="badge badge-blue">{results.total} 条命中 / 扫描 {results.scanned} 条</span>}
           </div>
           <div className="java-result-list">
             {!results && <div className="java-empty">先扫描 JAR 或文件夹建立索引，然后输入代码 / 注释 / 关键词检索。</div>}
             {results && !results.hits.length && <div className="java-empty">没有命中。试试更短的关键词，或切换检索模式 / 勾选更多字段。</div>}
-            {results?.hits.map((hit) => (
+            {visibleHits.map((hit) => (
               <div
                 key={hit.id}
                 role="button"

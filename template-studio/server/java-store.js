@@ -243,6 +243,59 @@ export function listSources() {
   return rows.map((r) => ({ ...r, actualFiles: map[r.id] || 0 }));
 }
 
+/**
+ * 检索候选项：按当前启用的来源类型 / 数据源 / 分组，返回可用的后缀、包名、分组与数据源。
+ * 前端在“检索来源”变化时调用，用来联动后缀过滤、包名过滤、分组过滤的下拉候选。
+ */
+export function facets(params = {}) {
+  const all = listSources();
+  const kinds = Array.isArray(params.sourceKinds) && params.sourceKinds.length
+    ? params.sourceKinds.filter((k) => k === 'jar' || k === 'folder')
+    : ['jar', 'folder'];
+  const ids = Array.isArray(params.sourceIds) ? params.sourceIds.filter(Boolean).map(String) : [];
+  const sourceId = params.sourceId ? String(params.sourceId) : '';
+  const group = normalizeGroup(params.sourceGroup);
+
+  const visible = all.filter((s) => {
+    if (!kinds.includes(s.kind)) return false;
+    if (sourceId && s.id !== sourceId) return false;
+    if (ids.length && !ids.includes(s.id)) return false;
+    if (group && !(s.group_name === group || s.group_name.startsWith(group + '/'))) return false;
+    return true;
+  });
+  if (!visible.length) return { sources: [], extensions: [], fileNames: [], packages: [], groups: [] };
+
+  const ph = visible.map(() => '?').join(',');
+  const idsArgs = visible.map((s) => s.id);
+  const extRows = asRows(db.prepare(
+    `SELECT DISTINCT path FROM java_files WHERE source_id IN (${ph}) LIMIT 50000`
+  ), ...idsArgs);
+  const extensions = new Set();
+  const fileNames = new Set();
+  for (const row of extRows) {
+    const p = String(row.path || '').replace(/\\/g, '/');
+    const m = /\.([A-Za-z0-9_+]+)$/.exec(p);
+    if (m) extensions.add('*.' + m[1].toLowerCase());
+    const base = p.split('/').pop();
+    if (base && fileNames.size < 400) fileNames.add(base);
+  }
+  const packages = asRows(db.prepare(
+    `SELECT DISTINCT package_name FROM java_files
+     WHERE source_id IN (${ph}) AND package_name <> '' ORDER BY package_name LIMIT 300`
+  ), ...idsArgs).map((r) => r.package_name);
+  const groups = [...new Set(visible.map((s) => s.group_name).filter(Boolean))].sort();
+
+  return {
+    sources: visible.map(({ id, name, kind, group_name, entry_count, actualFiles }) => ({
+      id, name, kind, group_name, entry_count, actualFiles,
+    })),
+    extensions: [...extensions].sort().slice(0, 120),
+    fileNames: [...fileNames].sort().slice(0, 120),
+    packages,
+    groups,
+  };
+}
+
 export function stats() {
   const one = (sql) => ({ ...db.prepare(sql).get() });
   return {
@@ -797,6 +850,42 @@ function extensionClause(exts, alias = 'e') {
   };
 }
 
+/**
+ * 解析文件名过滤：支持 basename 通配，如 "User*.java"、"*Service*.java"、"*.xml"、"A.java, B.java"。
+ * 仅匹配路径最后一段（文件名），不匹配中间目录；`*` → SQL `%`，其余 LIKE 元字符转义。
+ */
+function parseFileNameFilters(input) {
+  if (input == null) return [];
+  const parts = Array.isArray(input) ? input : String(input).split(/[,;\s]+/);
+  const out = [];
+  for (const raw of parts) {
+    const name = String(raw ?? '').trim();
+    if (!name) continue;
+    if (out.includes(name)) continue;
+    // 仅允许文件名常见字符 + 通配符，避免 LIKE 注入；长度上限防止构造超大表达式
+    if (!/^[\w.\-*{}+\[\]()~,]+$/.test(name) || name.length > 120) continue;
+    out.push(name);
+  }
+  return out.slice(0, 30);
+}
+
+/** 生成文件名过滤 SQL 片段：路径（统一 / 分隔符）最后一段对模式做 LIKE 匹配 */
+function fileNameClause(names, alias = 'e') {
+  if (!names.length) return { sql: '', params: [] };
+  // char(92) 为反斜杠：兼容 Windows 归档路径
+  const base = `LOWER(REPLACE(${alias}.path, char(92), '/'))`;
+  const conds = [];
+  const params = [];
+  for (const name of names) {
+    // 先转义用户输入中的 % / _ / \，再把 * 还原为 SQL 通配符
+    const pattern = escapeLike(name).replace(/\*/g, '%').toLowerCase();
+    // 带目录：'%/pattern'；无目录（纯文件名）：'pattern'
+    conds.push(`(${base} LIKE LOWER(?) ESCAPE '\\' OR ${base} LIKE LOWER(?) ESCAPE '\\')`);
+    params.push('%/' + pattern, pattern);
+  }
+  return { sql: ` AND (${conds.join(' OR ')})`, params };
+}
+
 function buildSnippet(entry, fieldKey, needle, needles, contextLines, rawQuery, caseSensitive = false) {
   const text = String(entry[fieldKey] ?? '');
   const ranges = [];
@@ -822,7 +911,7 @@ function buildSnippet(entry, fieldKey, needle, needles, contextLines, rawQuery, 
     + (codeHead ? `<div class="java-code-label">对应代码</div>` + numberedLines(codeHead, entry.start_line, []) : '');
 }
 
-function fetchCandidates({ sourceId, sourceIds, sourceKinds, sourceGroup, extensions, packageFilters, needle, fields, mode, caseSensitive }) {
+function fetchCandidates({ sourceId, sourceIds, sourceKinds, sourceGroup, extensions, fileNames, packageFilters, needle, fields, mode, caseSensitive }) {
   const params = [];
   let sql = `SELECT ${ALL_COLUMNS}, e.id, e.source_id, e.file_id, e.kind, e.path, e.start_line, e.end_line, s.name source_name, s.kind source_kind, s.group_name source_group_name
              FROM java_entries e JOIN java_sources s ON s.id = e.source_id WHERE 1=1`;
@@ -839,6 +928,8 @@ function fetchCandidates({ sourceId, sourceIds, sourceKinds, sourceGroup, extens
   if (grp.sql) { sql += grp.sql; params.push(...grp.params); }
   const ext = extensionClause(extensions);
   if (ext.sql) { sql += ext.sql; params.push(...ext.params); }
+  const fn = fileNameClause(fileNames);
+  if (fn.sql) { sql += fn.sql; params.push(...fn.params); }
   const pkg = packageFilterClause(packageFilters, caseSensitive);
   if (pkg.sql) { sql += pkg.sql; params.push(...pkg.params); }
   if (mode !== 'regex' && needle && fields.length) {
@@ -869,6 +960,7 @@ export function search(params = {}) {
   const sourceGroup = params.sourceGroup ? String(params.sourceGroup) : '';
   const caseSensitive = params.caseSensitive === true || params.caseSensitive === 'true';
   const extensions = parseExtensions(params.fileExtensions ?? params.extensions);
+  const fileNames = parseFileNameFilters(params.fileNameFilter ?? params.fileNames);
   const packageFilters = parsePackageFilters(params.packageFilter ?? params.packages);
   // 按数据源过滤：显式传入 sourceIds 时只检索这些批次；空数组表示未选任何数据源
   const hasSourceFilter = Array.isArray(params.sourceIds);
@@ -888,11 +980,15 @@ export function search(params = {}) {
     : FIELDS;
   if (!fields.length) fields = FIELDS;
 
+  // 首尾空格一律归一化（regex 模式空格可能是表达式的一部分，保持原样）
+  const normalizedQuery = mode === 'regex' ? rawQuery : rawQuery.trim();
   // 代码段（多行、含括号/泛型/分号，或较长）按整段匹配：原样 → 压缩空白，不拆成单词
   const blockQuery = mode === 'fuzzy' && (
-    /[\r\n]/.test(rawQuery) || /[(){}<>;=]/.test(rawQuery) || rawQuery.trim().length > 30
+    /[\r\n]/.test(rawQuery) || /[(){}<>;=]/.test(rawQuery) || normalizedQuery.length > 30
   );
-  const terms = blockQuery ? [rawQuery.trim()] : splitTerms(rawQuery);
+  // 词间带空格的关键字：先作为连续短语匹配（忽略空白差异），无命中再回退多词
+  const phraseQuery = mode !== 'regex' && !blockQuery && /\s/.test(normalizedQuery);
+  const terms = (blockQuery || phraseQuery) ? [normalizedQuery] : splitTerms(normalizedQuery);
   if (!terms.length) return { hits: [], total: 0, scanned: 0, terms: [], refresh };
 
   let regex = null;
@@ -906,7 +1002,7 @@ export function search(params = {}) {
   if (mode === 'fulltext' && !FTS_AVAILABLE) {
     // FTS5 が使えない Node ビルドでは LIKE あいまい検索へフォールバックする
     candidates = fetchCandidates({
-      sourceId, sourceIds, sourceKinds, sourceGroup, extensions, packageFilters,
+      sourceId, sourceIds, sourceKinds, sourceGroup, extensions, fileNames, packageFilters,
       needle: anchorOf(terms.join(' ')), fields, mode: 'fuzzy', caseSensitive,
     });
   } else if (mode === 'fulltext') {
@@ -929,6 +1025,8 @@ export function search(params = {}) {
     if (grp.sql) { sql += grp.sql; args.push(...grp.params); }
     const ext = extensionClause(extensions);
     if (ext.sql) { sql += ext.sql; args.push(...ext.params); }
+    const fn = fileNameClause(fileNames);
+    if (fn.sql) { sql += fn.sql; args.push(...fn.params); }
     const pkg = packageFilterClause(packageFilters, caseSensitive);
     if (pkg.sql) { sql += pkg.sql; args.push(...pkg.params); }
     sql += ` ORDER BY e.id DESC LIMIT ${MAX_SCAN}`;
@@ -937,13 +1035,13 @@ export function search(params = {}) {
     // unicode61 对中文分词不友好：FTS 无结果时回退到 LIKE 模糊匹配
     if (!candidates.length) {
       candidates = fetchCandidates({
-        sourceId, sourceIds, sourceKinds, sourceGroup, extensions, packageFilters,
+        sourceId, sourceIds, sourceKinds, sourceGroup, extensions, fileNames, packageFilters,
         needle: anchorOf(terms.join(' ')), fields, mode: 'fuzzy', caseSensitive,
       });
     }
   } else {
     candidates = fetchCandidates({
-      sourceId, sourceIds, sourceKinds, sourceGroup, extensions, packageFilters,
+      sourceId, sourceIds, sourceKinds, sourceGroup, extensions, fileNames, packageFilters,
       needle: anchorOf(blockQuery ? terms[0] : terms.join(' ')), fields, mode, caseSensitive,
     });
   }
@@ -955,79 +1053,106 @@ export function search(params = {}) {
     return out;
   });
 
-  const hits = [];
-  for (const entry of candidates) {
-    const matched = [];
-    let primaryKey = '';
-    let primaryAt = null;
-    for (const f of fields) {
-      const value = String(entry[f.col] ?? '');
-      let ok = false;
-      let location = null;
-      if (mode === 'regex') {
-        regex.lastIndex = 0;
-        const m = regex.exec(value);
-        ok = Boolean(m);
-        if (ok) location = { index: m.index, length: m[0].length };
-      } else if (mode === 'fulltext') {
-        location = findNeedle(value, terms, caseSensitive);
-        ok = Boolean(location);
-      } else if (blockQuery) {
-        location = findNeedle(value, terms, caseSensitive) || findCollapsed(value, terms, caseSensitive);
-        ok = Boolean(location);
-      } else {
-        location = findNeedle(value, terms, caseSensitive);
-        ok = Boolean(location);
-      }
-      if (ok) {
-        matched.push({
-          key: f.key,
-          label: f.key === 'methodContent' && entry.kind === 'text' ? '文件内容' : f.label,
-        });
-        if (!primaryKey || f.key === 'methodContent' || f.key === 'methodComment') {
+  // 命中收集：collapse=true 时按整段（忽略空白差异）匹配；applyAnd=true 时多词需全部命中
+  const collectHits = (rows, needles, collapse, applyAnd) => {
+    const out = [];
+    for (const entry of rows) {
+      const matched = [];
+      let primaryKey = '';
+      let primaryAt = null;
+      for (const f of fields) {
+        const value = String(entry[f.col] ?? '');
+        let ok = false;
+        let location = null;
+        if (mode === 'regex') {
+          regex.lastIndex = 0;
+          const m = regex.exec(value);
+          ok = Boolean(m);
+          if (ok) location = { index: m.index, length: m[0].length };
+        } else if (mode === 'fulltext') {
+          location = findNeedle(value, needles, caseSensitive);
+          ok = Boolean(location);
+        } else if (collapse) {
+          location = findNeedle(value, needles, caseSensitive) || findCollapsed(value, needles, caseSensitive);
+          ok = Boolean(location);
+        } else {
+          location = findNeedle(value, needles, caseSensitive);
+          ok = Boolean(location);
+        }
+        if (ok) {
+          matched.push({
+            key: f.key,
+            label: f.key === 'methodContent' && entry.kind === 'text' ? '文件内容' : f.label,
+          });
           if (!primaryKey || f.key === 'methodContent') { primaryKey = f.key; primaryAt = location; }
         }
       }
+      if (applyAnd && mode !== 'regex') {
+        const allText = caseSensitive
+          ? fields.map((f) => String(entry[f.col] ?? '')).join('\n')
+          : fields.map((f) => String(entry[f.col] ?? '')).join('\n').toLowerCase();
+        if (!needles.every((t) => allText.includes(caseSensitive ? t : t.toLowerCase()))) continue;
+      }
+      if (mode === 'regex') {
+        const allText = fields.map((f) => String(entry[f.col] ?? '')).join('\n');
+        regex.lastIndex = 0;
+        if (!regex.test(allText)) continue;
+      }
+      if (!matched.length) continue;
+      const needleText = primaryAt ? String(entry[primaryKey] ?? '').slice(primaryAt.index, primaryAt.index + primaryAt.length) : needles[0];
+      out.push({
+        id: entry.id,
+        sourceId: entry.source_id,
+        sourceName: entry.source_name,
+        sourceKind: entry.source_kind,
+        sourceGroup: entry.source_group_name || '',
+        fileId: entry.file_id,
+        kind: entry.kind,
+        path: entry.path,
+        packageName: entry.package_name,
+        className: entry.class_name,
+        fieldName: entry.field_name,
+        methodName: entry.method_name,
+        signature: entry.signature,
+        startLine: entry.start_line,
+        endLine: entry.end_line,
+        matchedFields: matched,
+        fileName: String(entry.path || '').replace(/\\/g, '/').split('/').pop() || '',
+        packageComment: entry.package_comment || '',
+        classComment: entry.class_comment || '',
+        methodComment: entry.method_comment || '',
+        fieldComment: entry.field_comment || '',
+        snippetHtml: buildSnippet(entry, primaryKey, needleText, primaryAt ? [needleText] : needles, contextLines, normalizedQuery, caseSensitive),
+        methodPreview: entry.method_content.length > 1600 ? entry.method_content.slice(0, 1600) + '\n…（省略）' : entry.method_content,
+      });
+      if (out.length >= limit) break;
     }
-    // AND：每个关键词至少要命中一个字段
-    if (logic === 'and' && mode !== 'regex' && !blockQuery) {
-      const allText = caseSensitive
-        ? fields.map((f) => String(entry[f.col] ?? '')).join('\n')
-        : fields.map((f) => String(entry[f.col] ?? '')).join('\n').toLowerCase();
-      if (!terms.every((t) => allText.includes(caseSensitive ? t : t.toLowerCase()))) continue;
+    return out;
+  };
+
+  let hits = collectHits(candidates, terms, blockQuery || phraseQuery, logic === 'and' && !blockQuery && !phraseQuery);
+
+  // 带空格的短语整段无命中 → 回退为多关键词匹配（首尾空格已归一化，仍支持空白差异）
+  let phraseFallback = false;
+  if (phraseQuery && !hits.length) {
+    const wordTerms = splitTerms(normalizedQuery);
+    if (wordTerms.length > 1) {
+      // 用更宽泛的锚点重新取候选，避免整段预筛把单词命中过滤掉
+      const wideCandidates = fetchCandidates({
+        sourceId, sourceIds, sourceKinds, sourceGroup, extensions, fileNames, packageFilters,
+        needle: anchorOf(wordTerms.join(' ')), fields, mode: 'fuzzy', caseSensitive,
+      }).map((row) => {
+        const out = { ...row };
+        for (const f of FIELDS) out[f.key] = row[f.col];
+        return out;
+      });
+      hits = collectHits(wideCandidates, wordTerms, false, logic === 'and');
+      phraseFallback = wordTerms.length > 1 && hits.length > 0;
     }
-    if (mode === 'regex') {
-      const allText = fields.map((f) => String(entry[f.col] ?? '')).join('\n');
-      regex.lastIndex = 0;
-      if (!regex.test(allText)) continue;
-    }
-    if (!matched.length) continue;
-    const needleText = primaryAt ? String(entry[primaryKey] ?? '').slice(primaryAt.index, primaryAt.index + primaryAt.length) : terms[0];
-    hits.push({
-      id: entry.id,
-      sourceId: entry.source_id,
-      sourceName: entry.source_name,
-      sourceKind: entry.source_kind,
-      sourceGroup: entry.source_group_name || '',
-      fileId: entry.file_id,
-      kind: entry.kind,
-      path: entry.path,
-      packageName: entry.package_name,
-      className: entry.class_name,
-      fieldName: entry.field_name,
-      methodName: entry.method_name,
-      signature: entry.signature,
-      startLine: entry.start_line,
-      endLine: entry.end_line,
-      matchedFields: matched,
-      snippetHtml: buildSnippet(entry, primaryKey, needleText, primaryAt ? [needleText] : terms, contextLines, rawQuery, caseSensitive),
-      methodPreview: entry.method_content.length > 1600 ? entry.method_content.slice(0, 1600) + '\n…（省略）' : entry.method_content,
-    });
-    if (hits.length >= limit) break;
   }
   return {
-    hits, total: hits.length, scanned: candidates.length, terms, mode, blockQuery, refresh,
-    filters: { caseSensitive, extensions, packageFilters, sourceIds, sourceKinds, sourceGroup },
+    hits, total: hits.length, scanned: candidates.length, terms, mode, blockQuery, phraseQuery, phraseFallback, refresh,
+    filters: { caseSensitive, extensions, fileNames, packageFilters, sourceIds, sourceKinds, sourceGroup },
   };
 }
 

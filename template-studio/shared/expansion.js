@@ -385,34 +385,3 @@ export function buildRangeRows({
   return out;
 }
 
-/** front-matter の table / multi / expand から TABLE の初期行を作る */
-export function seedTableConfig(meta, variables) {
-  const columns = tableColumns(variables);
-  const cfg = meta?.table && typeof meta.table === 'object' && !Array.isArray(meta.table)
-    ? meta.table
-    : {};
-  const rows = [];
-  if (Array.isArray(cfg.rows)) {
-    for (const r of cfg.rows.slice(0, TABLE_MAX_ROWS)) {
-      const row = blankTableRow(columns);
-      if (Array.isArray(r)) columns.forEach((c, i) => { row[c] = cellText(r[i]); });
-      else if (r && typeof r === 'object') {
-        for (const c of columns) if (r[c] != null) row[c] = cellText(r[c]);
-      }
-      rows.push(row);
-    }
-  }
-  if (!rows.length) {
-    const v = variables.find((x) => x.multi) || variables.find((x) => x.expand);
-    if (v) {
-      const gen = normalizeGenerator({}, v);
-      const items = gen.mode === 'values' ? valueItems(gen) : expansionItems(gen);
-      for (const it of items) {
-        const row = blankTableRow(columns);
-        row[v.name] = it.value;
-        rows.push(row);
-      }
-    }
-  }
-  return { enabled: cfg.enabled !== false, columns, rows };
-}
