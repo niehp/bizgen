@@ -1,0 +1,137 @@
+LM Studio + qwen2.5-coder-14b-instruct + Temperature 固定 0.1
+Java 11 + 原生 HttpClient + Jackson + JavaParser
+ 工作环境是日语 开发环境是日语
+ 
+用workbuddy生成一个 ai gent 程序
+怎么写 workbuddy用的prompt
+ 开发一个自作ai agent 用于开发java程序
+  工作环境是日语 开发环境是日语
+ 需求
+   功能描写md+api库+术语库+本地大模型（qwen2.5-coder-14b-instruct）
+   
+让 WorkBuddy（桌面端/IDE AI 助手）从零编写并构建这个“自制 AI Agent 系统”本身（例如 bizgen-agent 项目的完整代码
+分阶段（先建骨架，再填核心模块）
+
+#阶段一：架构设计与项目骨架生成 Prompt
+你是一位精通 Java 11 和 AI Agent 架构的资深系统架构师。现在请帮我在当前工作区从零构建一个用于自动生成企业级 Java 代码的本地 AI Agent 系统（项目名：bizgen-agent）。
+
+### 1. 系统核心需求
+本系统需要读取以下 3 类本地知识输入，结合本地部署的大模型，自动生成符合日语开发环境规范的 Java 源代码：
+1. **功能描写文件（Markdown）**：描述业务流程、输入输出、校验逻辑的 MD 文档。
+2. **既存 API 库（API Library）**：包含内部公共类、工具类、接口签名及说明的文档或代码索引。
+3. **业务与技术术语库（Glossary）**：日语业务词汇与标准英文变量名/类名/数据类型的映射表。
+
+### 2. 技术栈与环境约束
+- **开发语言与版本**：Java 11 + Maven
+- **目标工作/开发环境**：全日语环境（生成的目标 Java 代码中的 Javadoc、行内注释、日志信息、以及与大模型交互的 System Prompt 必须使用自然、规范的商务/技术日语）。
+- **本地大模型接入**：通过 HTTP 客户端（原生 `java.net.http.HttpClient`）调用本地推理服务，模型名称为 `qwen2.5-coder-14b-instruct`。
+  - *注意*：请务必提供可配置的 Base URL 和 Endpoint（同时支持 Ollama 原生 `/api/chat` 和 OpenAI 兼容模式 `/v1/chat/completions` 的切换，防止路径 404 错误），并将 `temperature` 设为 `0.1`，上下文窗口 `num_ctx` 设为 `16384` 或以上。
+- **文件编码**：全项目强制使用 UTF-8（确保在 Windows/Mac 控制台及读取日语 MD 文件时绝不出现乱码）。
+
+### 3. 本阶段任务（架构与基础代码生成）
+请按以下步骤在当前目录下生成代码文件：
+1. 输出完整的 `pom.xml`（包含 Java 11 编译插件、JSON 处理库 Jackson、HTTP 客户端及必要的工具库，确保无版本冲突）。
+2. 设计清晰的包结构（例如：`config`、`parser`、`rag`、`llm`、`agent`、`generator`）。
+3. 实现 **输入解析模块（Parser）**：编写能够解析 Markdown 标题与内容、读取术语库（支持 MD 表格或 Key-Value 格式）和 API 库文档的 Java 类。
+4. 实现 **本地 LLM 客户端模块（LLM Client）**：编写调用 `qwen2.5-coder-14b-instruct` 的封装类，内置针对日语 Java 开发的 System Prompt 模板。
+
+请先列出你规划的目录结构，然后依次创建 `pom.xml` 和上述基础模块的完整 Java 代码。
+
+#阶段二：Agent 核心工作流与代码生成引擎 Prompt
+很好，基础模块已经建立。现在请继续实现本系统的核心 **Agent 编排引擎（Agent Orchestrator）** 与 **端到端测试样例**。
+
+### 1. Agent 核心工作流要求
+请设计一个多步骤的 Agent 执行管道（Pipeline），当输入一个“功能描写 MD”时，Agent 自动执行以下步骤：
+- **Step 1（需求与术语提取）**：分析功能描写 MD 中的业务词汇，自动从【术语库】中检索匹配的日语-英文映射词条。
+- **Step 2（API 匹配检索）**：根据功能需求，从【API 库】中筛选出相关的既存工具类/方法签名，作为上下文注入（避免大模型编造不存在的 API）。
+- **Step 3（日语代码生成）**：将“功能 MD + 匹配到的术语 + 匹配到的 API + 日语开发规范”组装成结构化 Prompt，发送给 `qwen2.5-coder-14b-instruct` 生成目标 Java 代码。
+- **Step 4（代码规范自检与修正）**：对大模型返回的文本提取纯 Java 代码块，检查是否包含非法字符或违反术语库命名，如格式有误自动触发一次自我修正（Self-Correction）请求。
+- **Step 5（文件落盘）**：按照包名结构，将生成的 `.java` 文件以 UTF-8 编码自动保存到指定的输出目录（如 `output/src/main/java/...`）。
+
+### 2. 示例数据与主程序生成
+为了让我能立刻运行验证效果，请同时在 `src/main/resources/sample/` 下创建 3 个日语测试文件，并编写 `Main.java` 启动类：
+1. `glossary.md`：包含 5~10 个常见日语业务术语（如：顧客ID -> `customerId`、請求金額 -> `billingAmount` 等）。
+2. `api_library.md`：包含 2~3 个模拟的既存内部工具类签名（如日付変換、金額計算等）。
+3. `feature_spec.md`：一份用日语写的简单业务功能设计书（例如：月次請求データ集計処理）。
+
+请直接创建上述所有文件，并确保整个项目可以通过 `mvn clean compile` 顺利编译。
+
+
+现在请为纯原生 Java 项目 `bizgen-agent` 新增**「既存プロジェクトのJavaソースコード自動スキャン＆APIシグネチャ抽出機能」**（自动扫描目标现有项目的 `.java` 源码并提取 API 签名），以替代或补充手动维护 `api_library.md` 的工作。
+
+### 1. 依赖更新（`pom.xml`）
+- 在 `pom.xml` 中引入轻量级 AST 解析库 `com.github.javaparser:javaparser-core`（最新稳定版，如 `3.26.2`）。它无任何传递依赖，完全符合轻量级纯原生 Java 架构要求。
+
+### 2. 新增源码扫描与签名提取器（`parser/JavaSourceApiExtractor.java`）
+请使用 `JavaParser` 编写一个高精度的静态源码解析器，具备以下能力：
+- **目录递归扫描**：支持配置一个或多个目标项目源码目录路径（例如 `targetProjectSrcDirs`，如 `../existing-app/src/main/java`），递归扫描所有 `.java` 文件（自动排除 `*Test.java` 或 `package-info.java`）。
+- **提取公共 API 契约（剔除方法体实现，极致压缩 Token）**：
+  对于每个 `public` 的 `class`、`interface`、`record`、`enum`：
+  1. 提取**完整包名与类名**（含泛型参数、继承 `extends` 与实现 `implements` 关系）。
+  2. 提取类级别的**日语 Javadoc 注释摘要**（帮助大模型理解该类的业务用途）。
+  3. 提取所有 `public`（及 `protected`）的**构造方法签名**和**方法签名**（包含修饰符、`static` 关键字、返回类型、方法名、参数列表类型与参数名、抛出异常 `throws`），以及方法上的**日语 Javadoc 第一行说明**。
+  4. 如果是 `DTO` / `Entity` / `Record`，提取其 `public` 字段或 Record 组件定义。
+  5. **完全剥离方法体 `{ ... }`**，仅输出精简的“骨架签名格式”，大幅节省 `qwen2.5-coder-14b-instruct` 的上下文长度。
+- **格式化输出**：将提取结果转换为清晰的 Markdown 结构（与原有的 `ApiEntry` 模型统一），包含文件路径、完整类名、日语说明及方法签名列表。
+
+### 3. 升级配置与上下文检索（`AgentConfig` & `ContextRetriever` & `JavaDevAgent`）
+- **`config/AgentConfig.java`**：新增配置项 `existingJavaSourceDirs`（现有 Java 源码路径列表）和 `apiCacheFile`（可选：将提取结果缓存为 `extracted_api_cache.md` 方便开发者查看）。
+- **`agent/ContextRetriever.java`**：
+  - 将「从真实 `.java` 源码提取的 API」与「手动编写的 `api_library.md`」合并为统一的 API 知识库。
+  - 优化相关性检索算法：根据「功能描写 MD」中的日语关键词（匹配 Javadoc 说明）和英文技术关键词（匹配类名、方法名），智能筛选出 Top-K 最相关的既存类签名注入 Prompt，避免把整个大型项目的几百个类全部塞入模型导致上下文溢出。
+- **`agent/JavaDevAgent.java`**：在启动时打印清晰的日语扫描统计日志（例如：`既存ソースコードをスキャン中... 42ファイルから 128個の公開APIメソッドを抽出しました`）。
+
+
+请直接修改 `pom.xml` 并创建/更新上述所有相关文件。
+
+
+自作AI Agent
+AI Agent的要求
+  连接本地大模型。参数只有14B。数据不能外泄
+  工作环境是日语，生产环境是日语
+  使用windows操作系统
+  用于 基于既存java项目的二次开发。
+  自作AI Agent的代码的包底名是 com.walk_nie.bizgen.agent
+  LLM负责 语义映射、意图分类、代码草稿生成、润色
+  AI Agent 要求 高确定性，重编排。把确定性留给代码，把不确定性留给模型
+  AI Agent 要求 强类型。状态复杂
+  AI Agent 要求 重视 代码生成流水线
+  由人工审核代码
+  命令行交互
+  流程控制、参数校验、状态跳转等百分之百 确定性
+  生成内容 来自md文件
+  生成过程中，导入状态管理，多轮调用大模型，实现function tool功能
+  
+JAVA生成
+  要实现的功能写在功能md文件里，读取该md，从既有代码中搜索类似代码，喂给大模型，大模型生成java代码
+  可以生成新java文件，也可以既有java文件添加方法，修改方法。
+  生成的代码中，生成标准的包注释，标准的类注释，标准的方法注释。
+  注释要简单明了，注释里，做了什么，为什么这么做。用日语注释
+  md文件内容 可以定义变量，格式如{{applicationId}}
+  设计记录在md文件夹中，文件夹分级管理，有 java共通级，项目共通级，usecase级，类级，方法级。
+  一个级别一个文件夹 按级别管理设计md文件
+  功能md 文件支持变量 喂给大模型之前 完成替换，设计md文件内容进行替换
+  按照功能MD文件的内容，按需读入各级别 设计md文件的内容，喂给大模型
+  配置文件存储大模型的信息 不是--live
+  
+  生成功能md模板，用于创建一个Java文件，模板内容包括 包名 包注释 类名 类注释 字段 字段注释 方法 方法注释
+  功能md模板 包 类 方法等都可以使用变量 
+  功能md模板 提供各个方法的功能的表述模板
+  
+  生成文件的保存路径，通过配置文件指定
+  喂给大模型的既存文件的路径，通过配置文件指定
+  
+  
+
+SQL生成
+  select型 update型 delete型sql 
+  prompt中sql雏形+md文件的表结构 大模型 生成SQL，保存到文件
+  prompt的内容存于文件，prompt内容也含有变量，生成时作为参数传入
+  限制 喂给大模型的表结构的数量，只SQL中用到的表的结构 喂给大模型
+  创建一个存放表结构的模板 存到md文件 一个表一个md文件
+  创建一个生成update sql用的prompt模板 存到md文件
+  创建一个生成delete sql用的prompt模板 存到md文件
+  创建一个生成select sql用的prompt模板，支持多表结合查询， 存到md文件
+  prompt,md文件的表名，字段名，用的是日语，喂给大模型之前，完成转化 表名->表结构->字段日语名->字段英语名
+  变量 自动匹配 首字母大写，首字母小写 大驼峰 小驼峰 大蛇形 小蛇形
+  sql支持变量. 变量格式 字段是字符型：/*变量的小驼峰*/‘xx'; 日期型：/*变量的小驼峰*/CURREN_DATE; 数字型：/*变量的小驼峰`*/9 

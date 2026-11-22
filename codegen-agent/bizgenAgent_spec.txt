@@ -1,0 +1,10 @@
+生成Java
+  功能描述(Excel Sheet) + Java Class/method/field模板 + API库 + 全局变量 + 术语库 -》代码
+
+生成SQL
+  功能描述(Excel Sheet) + DB元数据metadata -》SQL文
+  支持placeholder。字段名的小驼峰型 /*字段名的小驼峰*/''
+  SELECT文
+  UPDATE文
+  DELETE文
+  
