@@ -22,6 +22,8 @@ public final class AgentConfig {
     private final int maxTokens;
     private final int timeoutMs;
     private final Integer seed;
+    private final String toolChoice;
+    private final boolean toolCallRecovery;
 
     private final Path mdRoot;
     private final Path outputRoot;
@@ -29,6 +31,13 @@ public final class AgentConfig {
     private final Path existingJavaRoot;
     private final Path searchJavaRoot;
     private final Path configFile;
+    private final Path termRoot;
+    private final Path apiRoot;
+    private final Path featureOutputRoot;
+    private final Path templateFillRoot;
+    private final Path templateFillOutputRoot;
+    private final String templateFillPrompt;
+    private final int templateFillMaxFiles;
 
     private final int maxTables;
     private final int maxSimilarFiles;
@@ -40,6 +49,8 @@ public final class AgentConfig {
     private final int agentMaxRounds;
     private final int agentMaxToolCalls;
     private final int agentMaxSameCall;
+    private final int apiTopN;
+    private final boolean selfCorrect;
 
     private AgentConfig(Properties properties) {
         this.baseUrl = value(properties, "llm.baseUrl", "http://127.0.0.1:11434/v1");
@@ -51,6 +62,10 @@ public final class AgentConfig {
         this.timeoutMs = Integer.parseInt(value(properties, "llm.timeoutMs", "180000"));
         String seedValue = value(properties, "llm.seed", "42").trim();
         this.seed = seedValue.isEmpty() ? null : Integer.valueOf(seedValue);
+        this.toolChoice = value(properties, "llm.toolChoice", "auto")
+                .toLowerCase(java.util.Locale.ROOT);
+        this.toolCallRecovery = Boolean.parseBoolean(
+                value(properties, "agent.toolCallRecovery", "true"));
 
         this.mdRoot = java.nio.file.Paths.get(value(properties, "path.mdRoot", "md"));
         this.outputRoot = java.nio.file.Paths.get(value(properties, "path.outputRoot", "out"));
@@ -63,6 +78,17 @@ public final class AgentConfig {
                 ? this.existingJavaRoot : java.nio.file.Paths.get(searchRoot);
         this.configFile = java.nio.file.Paths.get(
                 value(properties, "path.configFile", "config/agent-config.properties"));
+        this.termRoot = java.nio.file.Paths.get(value(properties, "path.termRoot", "md/term"));
+        this.apiRoot = java.nio.file.Paths.get(value(properties, "path.apiRoot", "md/api"));
+        this.featureOutputRoot = java.nio.file.Paths.get(
+                value(properties, "path.featureOutputRoot", "output/src/main/java"));
+        String templateFillRootValue = value(properties, "path.templateFillRoot", "").trim();
+        this.templateFillRoot = templateFillRootValue.isEmpty()
+                ? null : java.nio.file.Paths.get(templateFillRootValue);
+        this.templateFillOutputRoot = java.nio.file.Paths.get(
+                value(properties, "path.templateFillOutputRoot", "out/template-fill"));
+        this.templateFillPrompt = value(properties, "templateFill.prompt", "template-fill");
+        this.templateFillMaxFiles = Integer.parseInt(value(properties, "templateFill.maxFiles", "50"));
 
         this.maxTables = Integer.parseInt(value(properties, "gen.maxTables", "5"));
         this.maxSimilarFiles = Integer.parseInt(value(properties, "gen.maxSimilarFiles", "5"));
@@ -74,6 +100,8 @@ public final class AgentConfig {
         this.agentMaxRounds = Integer.parseInt(value(properties, "agent.maxRounds", "8"));
         this.agentMaxToolCalls = Integer.parseInt(value(properties, "agent.maxToolCalls", "30"));
         this.agentMaxSameCall = Integer.parseInt(value(properties, "agent.maxSameCall", "3"));
+        this.apiTopN = Integer.parseInt(value(properties, "gen.apiTopN", "8"));
+        this.selfCorrect = Boolean.parseBoolean(value(properties, "gen.selfCorrect", "true"));
     }
 
     private static String value(Properties properties, String key, String defaultValue) {
@@ -129,6 +157,16 @@ public final class AgentConfig {
         return seed;
     }
 
+    /** OpenAI 互換 API の tool_choice（auto / required / none）。 */
+    public String toolChoice() {
+        return toolChoice;
+    }
+
+    /** content に漏れた tool 呼び出しテキストを復元するか。 */
+    public boolean toolCallRecovery() {
+        return toolCallRecovery;
+    }
+
     public Path mdRoot() {
         return mdRoot;
     }
@@ -153,6 +191,45 @@ public final class AgentConfig {
 
     public Path configFile() {
         return configFile;
+    }
+
+    public Path termRoot() {
+        return termRoot;
+    }
+
+    public Path apiRoot() {
+        return apiRoot;
+    }
+
+    /** feature-gen の出力ルート（パッケージ構造はこの下に作られる）。 */
+    public Path featureOutputRoot() {
+        return featureOutputRoot;
+    }
+
+    /** テンプレート一括入力ルート。未設定なら template-fill は使用不可。 */
+    public Path templateFillRoot() {
+        return templateFillRoot;
+    }
+
+    /** テンプレート一括出力ルート（相対ディレクトリ構造を維持して書き出す）。 */
+    public Path templateFillOutputRoot() {
+        return templateFillOutputRoot;
+    }
+
+    public String templateFillPrompt() {
+        return templateFillPrompt;
+    }
+
+    public int templateFillMaxFiles() {
+        return templateFillMaxFiles;
+    }
+
+    public int apiTopN() {
+        return apiTopN;
+    }
+
+    public boolean selfCorrect() {
+        return selfCorrect;
     }
 
     public int maxTables() {
@@ -200,16 +277,25 @@ public final class AgentConfig {
                 + "temperature: " + temperature + "\n"
                 + "maxTokens : " + maxTokens + "\n"
                 + "seed      : " + seed + "\n"
+                + "toolChoice: " + toolChoice + "\n"
+                + "toolRecovery: " + toolCallRecovery + "\n"
                 + "mdRoot    : " + mdRoot.toAbsolutePath().normalize() + "\n"
                 + "javaOutRoot: " + generatedJavaRoot.toAbsolutePath().normalize() + "\n"
                 + "outputRoot: " + outputRoot.toAbsolutePath().normalize() + "\n"
                 + "javaRoot  : " + (existingJavaRoot == null ? "(未設定)" : existingJavaRoot.toAbsolutePath().normalize()) + "\n"
                 + "searchRoot: " + (searchJavaRoot == null ? "(未設定)" : searchJavaRoot.toAbsolutePath().normalize()) + "\n"
+                + "termRoot  : " + termRoot.toAbsolutePath().normalize() + "\n"
+                + "apiRoot   : " + apiRoot.toAbsolutePath().normalize() + "\n"
+                + "featureOut: " + featureOutputRoot.toAbsolutePath().normalize() + "\n"
+                + "tplFillIn : " + (templateFillRoot == null ? "(未設定)" : templateFillRoot.toAbsolutePath().normalize()) + "\n"
+                + "tplFillOut: " + templateFillOutputRoot.toAbsolutePath().normalize()
+                + " (prompt=" + templateFillPrompt + ", maxFiles=" + templateFillMaxFiles + ")\n"
                 + "maxTables : " + maxTables + "\n"
                 + "similarCode: maxFiles=" + maxSimilarFiles + ", maxChars=" + maxSimilarCodeChars
                 + ", scanLimit=" + searchMaxFiles + "\n"
                 + "agentLimits: rounds=" + agentMaxRounds + ", toolCalls=" + agentMaxToolCalls
                 + ", sameCall=" + agentMaxSameCall + "\n"
+                + "featureGen: apiTopN=" + apiTopN + ", selfCorrect=" + selfCorrect + "\n"
                 + "reviewRequired: " + reviewRequired;
     }
 }

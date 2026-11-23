@@ -25,6 +25,11 @@ public final class HttpLlmClient implements LlmClient {
 
     @Override
     public LlmResponse chat(LlmRequest request) {
+        return chatDetail(request).response();
+    }
+
+    /** 生のレスポンスボディも保持して返す。Tool 呼び出しの切り分け用。 */
+    public LlmRawResponse chatDetail(LlmRequest request) {
         assertLocalOnly(config.endpoint());
         HttpURLConnection connection = null;
         try {
@@ -52,7 +57,7 @@ public final class HttpLlmClient implements LlmClient {
             if (status < 200 || status >= 300) {
                 throw new LlmException("LLM が HTTP " + status + " を返しました: " + abbreviate(body));
             }
-            return LlmResponse.parse(body);
+            return new LlmRawResponse(LlmResponse.parse(body), body);
         } catch (IOException e) {
             throw new LlmException("LLM への接続に失敗しました: " + config.endpoint()
                     + " (" + e.getMessage() + ")", e);

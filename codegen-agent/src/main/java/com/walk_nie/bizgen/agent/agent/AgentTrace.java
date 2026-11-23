@@ -13,6 +13,7 @@ public final class AgentTrace {
     private final int promptTokens;
     private final int completionTokens;
     private final List<ToolResult> toolResults = new ArrayList<ToolResult>();
+    private String recoveryWarning = "";
 
     public AgentTrace(int round, String assistantContent, String finishReason,
                       int promptTokens, int completionTokens) {
@@ -25,6 +26,15 @@ public final class AgentTrace {
 
     public void add(ToolResult result) {
         toolResults.add(result);
+    }
+
+    /** content から tool 呼び出しを復元した場合の警告を保持する。 */
+    public void setRecoveryWarning(String warning) {
+        this.recoveryWarning = warning == null ? "" : warning;
+    }
+
+    public String recoveryWarning() {
+        return recoveryWarning;
     }
 
     public int round() {
@@ -54,6 +64,9 @@ public final class AgentTrace {
     public String describe() {
         StringBuilder out = new StringBuilder();
         out.append("round ").append(round).append(" [").append(finishReason).append("]");
+        if (!recoveryWarning.isEmpty()) {
+            out.append("\n    [WARN] ").append(recoveryWarning);
+        }
         if (!assistantContent.isEmpty()) {
             String text = assistantContent.length() > 120
                     ? assistantContent.substring(0, 120) + "..." : assistantContent;

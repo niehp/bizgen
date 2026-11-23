@@ -3,6 +3,7 @@ package com.walk_nie.bizgen.agent.agent;
 import com.walk_nie.bizgen.agent.llm.LlmMessage;
 import com.walk_nie.bizgen.agent.llm.LlmRequest;
 import com.walk_nie.bizgen.agent.llm.LlmResponse;
+import com.walk_nie.bizgen.agent.llm.ToolCallExtractor;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -63,24 +64,41 @@ public final class AgentLoop {
                     context.config().temperature(),
                     context.config().maxTokens(),
                     context.config().seed(),
-                    registry.definitions());
+                    registry.definitions(),
+                    context.config().toolChoice());
             this.lastRequest = request;
             LlmResponse response = context.llm().chat(request);
 
-            AgentTrace trace = new AgentTrace(round, response.content(), response.finishReason(),
-                    response.promptTokens(), response.completionTokens());
+            // Qwen2.5-Coder 等は tool 呼び出しを content のテキストとして出すことがある。
+            // structured な tool_calls が無い場合だけ、既知形式を保守的に復元する。
+            LlmResponse effective = response;
+            String recoveryWarning = "";
+            if (!response.hasToolCalls() && context.config().toolCallRecovery()) {
+                ToolCallExtractor.Result recovered = ToolCallExtractor.extract(response.content());
+                if (!recovered.calls().isEmpty()) {
+                    effective = new LlmResponse(recovered.remainingContent(), response.finishReason(),
+                            response.promptTokens(), response.completionTokens(), recovered.calls());
+                    recoveryWarning = recovered.warning();
+                } else {
+                    recoveryWarning = recovered.suspicion();
+                }
+            }
 
-            if (!response.hasToolCalls()) {
-                state.addMessage(LlmMessage.assistant(response.content()));
+            AgentTrace trace = new AgentTrace(round, effective.content(), effective.finishReason(),
+                    effective.promptTokens(), effective.completionTokens());
+            trace.setRecoveryWarning(recoveryWarning);
+
+            if (!effective.hasToolCalls()) {
+                state.addMessage(LlmMessage.assistant(effective.content()));
                 state.addTrace(trace);
-                state.setFinalAnswer(response.content());
+                state.setFinalAnswer(effective.content());
                 state.advance(AgentState.Phase.FINAL);
                 return new AgentResult(state, true);
             }
 
-            state.addMessage(LlmMessage.assistantWithTools(response.content(), response.toolCalls()));
+            state.addMessage(LlmMessage.assistantWithTools(effective.content(), effective.toolCalls()));
 
-            for (ToolCall call : response.toolCalls()) {
+            for (ToolCall call : effective.toolCalls()) {
                 String signature = call.describe();
                 int count = increment(callCounts, signature);
                 if (count > maxSameCall) {

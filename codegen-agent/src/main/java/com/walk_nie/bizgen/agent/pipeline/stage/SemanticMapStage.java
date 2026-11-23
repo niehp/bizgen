@@ -21,7 +21,7 @@ public final class SemanticMapStage implements Stage<JavaGenState, JavaGenState>
 
     @Override
     public String id() {
-        return "05-semantic-mapping";
+        return "07-semantic-mapping";
     }
 
     @Override

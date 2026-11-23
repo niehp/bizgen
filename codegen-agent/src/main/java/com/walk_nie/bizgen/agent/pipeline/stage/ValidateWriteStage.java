@@ -25,7 +25,7 @@ public final class ValidateWriteStage implements Stage<JavaGenState, JavaGenStat
 
     @Override
     public String id() {
-        return "09-validate-write";
+        return "12-validate-write";
     }
 
     @Override
@@ -35,7 +35,7 @@ public final class ValidateWriteStage implements Stage<JavaGenState, JavaGenStat
 
     @Override
     public JavaGenState execute(JavaGenState state, PipelineContext context) {
-        state.assertPhase(JavaGenState.Phase.POLISHED);
+        state.assertPhase(JavaGenState.Phase.VALIDATED);
         AgentConfig config = context.config();
         JavaDraft draft = state.draft();
         JavaChangeIntent intent = state.intent().intent();

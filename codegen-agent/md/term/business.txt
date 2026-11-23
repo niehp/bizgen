@@ -1,0 +1,19 @@
+# 業務术语（日本語 -> 英語）
+# 1 行 1 件套。長い語が優先して適用される。
+
+受注 -> order
+受注ID -> orderId
+受注一覧 -> orderList
+顧客 -> customer
+顧客ID -> customerId
+検索 -> search
+検索条件 -> condition
+有効 -> active
+削除フラグ -> deletedFlag
+リポジトリ -> repository
+必須チェック -> requiredCheck
+永続化 -> persistence
+アプリケーションサービス -> applicationService
+引数 -> argument
+戻り値 -> returnValue
+例外 -> exception

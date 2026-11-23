@@ -83,6 +83,33 @@ Java 11 + 原生 HttpClient + Jackson + JavaParser
 
 
 请直接修改 `pom.xml` 并创建/更新上述所有相关文件。
+## 1 前置信息
+  1.Java模板
+    模板文件，放在spec/template.模板文件含有变量。
+  2.API库
+    扫描Java代码库，总结出来常用API，存在spec/api下。md文件格式
+  3.术语库
+  
+## 2 Java代码生成
+  1.Java类及相关类的生成
+  2.单个Java类的生成
+  3.单个Java方法的生成
+  
+### 2-0. Java代码生成前置信息
+  1.Java规范，
+  2.Java模版
+  3.API库
+  4.术语库
+  
+### 2-1. Java代码生成步骤
+  1.输入功能描述.md文件。Java类群，单个类，单个方法对应不同的描述
+  2.多步骤的 Agent 执行管道（Pipeline）,工具调用
+  3.生成代码
+
+### 3 工具设计
+  1.功能描述中，有API需要的，调用查找API库的工具
+  
+  
 
 
 自作AI Agent

@@ -8,3 +8,42 @@
   UPDATE文
   DELETE文
   
+  
+型“知道有哪些自研类/方法可用、怎么正确调用、常见用法长什么样”
+ 包名与类名
+ 方法签名与职责
+ 参数约束与默认值
+ 调用约束与副作用
+ 典型使用例
+ Markdown
+
+
+我需要提供模板，大模型填充模板的各个部分。模板可能会放在不同的文件夹下，文件夹下所有模板 都需要填充，填充后保持目录结构。输出目录 可以配置
+
+Electron + React + nodejs 比较文件 比较文件夹
+  分左右2侧
+  左右侧比较对象文件，
+    文件名相同 
+    左or右文件名 同时 减 某些单词
+    左文件名 减 某些单词 右文件名 减 某些单词
+  比较内容
+    忽视 空格 tab 换行 可以配置
+    
+# maskPhone
+
+- **方法签名**: `public static String maskPhone(String phone)`
+- **所属类**: `com.company.common.util.MaskUtils`
+- **功能描述**: 将中国大陆 11 位手机号的中间 4 位替换为 `*`（如 `13812345678` -> `138****5678`）。如果传入为 `null`、空字符串或长度不是 11 位的纯数字，则原样返回（不抛异常）。
+
+## 使用例
+
+### 例 1：正常 11 位手机号脱敏
+```java
+import com.company.common.util.MaskUtils;
+
+String masked = MaskUtils.maskPhone("13812345678");
+// 结果: "138****5678"
+
+spec
+  template
+  

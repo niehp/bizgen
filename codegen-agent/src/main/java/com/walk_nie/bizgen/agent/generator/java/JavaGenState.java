@@ -1,7 +1,9 @@
 package com.walk_nie.bizgen.agent.generator.java;
 
+import com.walk_nie.bizgen.agent.api.ApiCatalog;
 import com.walk_nie.bizgen.agent.md.FeatureSpec;
 import com.walk_nie.bizgen.agent.md.MdDoc;
+import com.walk_nie.bizgen.agent.term.TermDictionary;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -17,11 +19,14 @@ public final class JavaGenState {
         FEATURE_LOADED,
         DESIGNS_LOADED,
         VARIABLES_RESOLVED,
+        TERMS_EXTRACTED,
+        APIS_MATCHED,
         INTENT_DECIDED,
         MAPPED,
         SIMILAR_CODE_FOUND,
         DRAFTED,
         POLISHED,
+        VALIDATED,
         WRITTEN
     }
 
@@ -34,7 +39,13 @@ public final class JavaGenState {
     private IntentResult intent;
     private SemanticMap semanticMap;
     private SimilarCodeResult similarCode;
+    private List<TermDictionary.TermEntry> terms = new ArrayList<TermDictionary.TermEntry>();
+    private String termsText = "";
+    private List<ApiCatalog.ApiEntry> apis = new ArrayList<ApiCatalog.ApiEntry>();
+    private String apisText = "";
     private JavaDraft draft;
+    private List<String> violations = new ArrayList<String>();
+    private boolean selfCorrected;
     private JavaWriteResult writeResult;
 
     public JavaGenState(String featureName) {
@@ -108,12 +119,60 @@ public final class JavaGenState {
         this.similarCode = similarCode;
     }
 
+    public List<TermDictionary.TermEntry> terms() {
+        return terms;
+    }
+
+    public void setTerms(List<TermDictionary.TermEntry> terms) {
+        this.terms = terms == null ? new ArrayList<TermDictionary.TermEntry>() : terms;
+    }
+
+    public String termsText() {
+        return termsText;
+    }
+
+    public void setTermsText(String termsText) {
+        this.termsText = termsText == null ? "" : termsText;
+    }
+
+    public List<ApiCatalog.ApiEntry> apis() {
+        return apis;
+    }
+
+    public void setApis(List<ApiCatalog.ApiEntry> apis) {
+        this.apis = apis == null ? new ArrayList<ApiCatalog.ApiEntry>() : apis;
+    }
+
+    public String apisText() {
+        return apisText;
+    }
+
+    public void setApisText(String apisText) {
+        this.apisText = apisText == null ? "" : apisText;
+    }
+
     public JavaDraft draft() {
         return draft;
     }
 
     public void setDraft(JavaDraft draft) {
         this.draft = draft;
+    }
+
+    public List<String> violations() {
+        return violations;
+    }
+
+    public void setViolations(List<String> violations) {
+        this.violations = violations == null ? new ArrayList<String>() : violations;
+    }
+
+    public boolean selfCorrected() {
+        return selfCorrected;
+    }
+
+    public void setSelfCorrected(boolean selfCorrected) {
+        this.selfCorrected = selfCorrected;
     }
 
     public JavaWriteResult writeResult() {

@@ -20,7 +20,7 @@ public final class PolishJavaStage implements Stage<JavaGenState, JavaGenState> 
 
     @Override
     public String id() {
-        return "08-polish-java";
+        return "10-polish-java";
     }
 
     @Override

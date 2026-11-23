@@ -2,8 +2,14 @@ package com.walk_nie.bizgen.agent.cli;
 
 import com.walk_nie.bizgen.agent.agent.AgentResult;
 import com.walk_nie.bizgen.agent.agent.AgentRunner;
+import com.walk_nie.bizgen.agent.agent.ToolCall;
+import com.walk_nie.bizgen.agent.agent.ToolDefinition;
+import com.walk_nie.bizgen.agent.api.ApiCatalog;
 import com.walk_nie.bizgen.agent.config.AgentConfig;
+import com.walk_nie.bizgen.agent.generator.feature.FeatureCodegenPipeline;
+import com.walk_nie.bizgen.agent.generator.feature.FeatureGenState;
 import com.walk_nie.bizgen.agent.generator.java.JavaGenPipeline;
+import com.walk_nie.bizgen.agent.generator.template.TemplateFillBatch;
 import com.walk_nie.bizgen.agent.generator.java.JavaGenState;
 import com.walk_nie.bizgen.agent.generator.java.JavaWriteResult;
 import com.walk_nie.bizgen.agent.generator.java.ResolvedFeature;
@@ -15,14 +21,22 @@ import com.walk_nie.bizgen.agent.generator.sql.SqlGenResult;
 import com.walk_nie.bizgen.agent.generator.sql.SqlGenState;
 import com.walk_nie.bizgen.agent.generator.sql.SqlType;
 import com.walk_nie.bizgen.agent.llm.HttpLlmClient;
+import com.walk_nie.bizgen.agent.llm.LlmMessage;
+import com.walk_nie.bizgen.agent.llm.LlmRawResponse;
+import com.walk_nie.bizgen.agent.llm.LlmRequest;
+import com.walk_nie.bizgen.agent.llm.LlmResponse;
+import com.walk_nie.bizgen.agent.llm.ToolCallExtractor;
 import com.walk_nie.bizgen.agent.md.DesignLevel;
 import com.walk_nie.bizgen.agent.md.MdDoc;
 import com.walk_nie.bizgen.agent.md.MdRepository;
 import com.walk_nie.bizgen.agent.pipeline.PipelineContext;
 import com.walk_nie.bizgen.agent.pipeline.PromptRenderer;
 import com.walk_nie.bizgen.agent.pipeline.StageTrace;
+import com.walk_nie.bizgen.agent.pipeline.stage.ExtractTermsStage;
 import com.walk_nie.bizgen.agent.pipeline.stage.LoadDesignStage;
 import com.walk_nie.bizgen.agent.pipeline.stage.LoadFeatureStage;
+import com.walk_nie.bizgen.agent.pipeline.stage.MatchApiCatalogStage;
+import com.walk_nie.bizgen.agent.term.TermDictionary;
 import com.walk_nie.bizgen.agent.pipeline.stage.ResolveVariablesStage;
 import com.walk_nie.bizgen.agent.pipeline.stage.SearchExistingCodeStage;
 import com.walk_nie.bizgen.agent.util.FileUtil;
@@ -38,6 +52,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -106,10 +121,14 @@ public final class Cli {
             printHelp();
         } else if ("config".equals(command)) {
             out.println(config.describe());
+        } else if ("llm-probe".equals(command)) {
+            llmProbe();
         } else if ("list".equals(command)) {
             list(options);
         } else if ("template".equals(command)) {
             template(options);
+        } else if ("template-fill".equals(command)) {
+            templateFill(options);
         } else if ("pipeline".equals(command)) {
             pipeline(options);
         } else if ("preview".equals(command)) {
@@ -122,6 +141,12 @@ public final class Cli {
             sqlGen(options);
         } else if ("tools".equals(command)) {
             tools();
+        } else if ("terms".equals(command)) {
+            terms();
+        } else if ("api-list".equals(command)) {
+            apiList();
+        } else if ("feature-gen".equals(command)) {
+            featureGen(options);
         } else if ("agent-gen".equals(command)) {
             agentGen(options);
         } else if ("agent-sql".equals(command)) {
@@ -137,17 +162,24 @@ public final class Cli {
         out.println("使用可能なコマンド:");
         out.println("  help");
         out.println("  config");
+        out.println("  llm-probe                                 実際に tool 付きで 1 回呼び、生レスポンスを表示");
         out.println("  list java|project|usecase|class|method|schema|prompt|template");
         out.println("  template java-class|table-schema [--out <file>]");
-        out.println("  pipeline java|sql");
+        out.println("  template-fill [--feature <md名>] [--var key=value] [--var.key=value]...");
+        out.println("               入力ディレクトリ配下の全テンプレートを填充し、相対パスを維持して出力");
+        out.println("  pipeline java|sql|feature");
         out.println("  preview java --feature <md名>");
         out.println("  preview sql --type select|update|delete --desc <内容> --tables <日本語表名,...> [--shape <SQL雛形>]");
         out.println("  preview agent [--feature <md名>]                 エージェントのツールと system prompt を表示");
         out.println("  search --feature <md名>                    既存 Java の類似コード検索のみ実行（LLM 不使用）");
-        out.println("  java-gen --feature <md名>                 通常の単発パイプラインで生成");
+        out.println("  java-gen --feature <md名>                 12 ステージの Java 生成フレームワークで生成");
+        out.println("           （术语抽出 / API 匹配 / 静的検証 + 1 回自己修正 を含む）");
         out.println("  sql-gen --type select|update|delete --desc <内容> --tables <日本語表名,...>");
         out.println("           [--shape <SQL雛形>] [--prompt <prompt名>] [--var key=value]... [--out <file>]");
         out.println("  tools                                     登録済み function tool 一覧（LLM 不使用）");
+        out.println("  terms                                     术语库（日本語 -> 英語）一覧（LLM 不使用）");
+        out.println("  api-list                                  API 库の登録済みメソッド一覧（LLM 不使用）");
+        out.println("  feature-gen --feature <md名>              5 ステップ Pipeline で Java を生成・落盤");
         out.println("  agent-gen --feature <md名>                 マルチターン Agent + tool 呼び出しで Java 生成");
         out.println("  agent-sql --type select|update|delete --desc <内容> --tables <日本語表名,...>");
         out.println("  agent-trace                               直近の Agent ターントレースを表示");
@@ -216,10 +248,40 @@ public final class Cli {
         out.println("テンプレートを出力しました: " + path);
     }
 
+    private void templateFill(Map<String, String> options) throws IOException {
+        Map<String, String> variables = new LinkedHashMap<String, String>();
+        if (options.containsKey("var")) {
+            String pair = options.get("var");
+            int equal = pair.indexOf('=');
+            if (equal > 0) {
+                variables.put(pair.substring(0, equal).trim(), pair.substring(equal + 1).trim());
+            }
+        }
+        for (Map.Entry<String, String> entry : options.entrySet()) {
+            if (entry.getKey().startsWith("var.")) {
+                variables.put(entry.getKey().substring(4), entry.getValue());
+            }
+        }
+
+        List<TemplateFillBatch.Result> results = new TemplateFillBatch()
+                .run(options.get("feature"), variables, context);
+        out.println("テンプレート填充完了: " + results.size() + " ファイル → "
+                + config.templateFillOutputRoot().toAbsolutePath().normalize());
+        for (TemplateFillBatch.Result result : results) {
+            out.println("  " + result.relativePath() + " -> " + result.outputPath());
+            if (!result.remaining().isEmpty()) {
+                out.println("[WARN] 未解決のプレースホルダ: " + result.relativePath()
+                        + " " + result.remaining());
+            }
+        }
+    }
+
     private void pipeline(Map<String, String> options) {
         String target = options.get("0");
         if ("sql".equalsIgnoreCase(target)) {
             out.println(new SqlGenPipeline().pipeline().stageIds().toString());
+        } else if ("feature".equalsIgnoreCase(target)) {
+            out.println(new FeatureCodegenPipeline().pipeline().stageIds().toString());
         } else {
             out.println(new JavaGenPipeline().pipeline().stageIds().toString());
         }
@@ -316,6 +378,8 @@ public final class Cli {
         new LoadFeatureStage().execute(state, context);
         new LoadDesignStage().execute(state, context);
         new ResolveVariablesStage().execute(state, context);
+        new ExtractTermsStage().execute(state, context);
+        new MatchApiCatalogStage().execute(state, context);
         ResolvedFeature resolved = state.resolved();
         state.setSemanticMap(stubSemanticMap(resolved));
         state.advance(JavaGenState.Phase.MAPPED);
@@ -332,6 +396,8 @@ public final class Cli {
         variables.put("featureBody", resolved.featureBody());
         variables.put("designDocs", resolved.designText());
         variables.put("similarCode", state.similarCode().promptText());
+        variables.put("termsText", state.termsText());
+        variables.put("apisText", state.apisText());
         out.println(PromptRenderer.render(repository, "java-generate", variables));
     }
 
@@ -348,6 +414,13 @@ public final class Cli {
             out.println("パッケージコメント: " + result.packageInfoFile());
         }
         out.println("変更種別: " + result.intent() + "（" + state.intent().source() + "）");
+        out.println("术语: " + state.terms().size() + " 件 / 既存 API: " + state.apis().size() + " 件");
+        if (state.selfCorrected()) {
+            out.println("[SELF-CORRECT] 静的検証違反を 1 回自己修正しました。");
+        }
+        if (!state.violations().isEmpty()) {
+            out.println("[WARN] 残存する静的検証違反: " + state.violations());
+        }
         if (!result.warnings().isEmpty()) {
             out.println("[WARN] 検証警告: " + result.warnings());
         }
@@ -377,6 +450,103 @@ public final class Cli {
         out.println("limits: rounds=" + config.agentMaxRounds()
                 + ", toolCalls=" + config.agentMaxToolCalls()
                 + ", sameCall=" + config.agentMaxSameCall());
+    }
+
+    /**
+     * LLM へ最小の tool 付きリクエストを 1 回だけ送り、生レスポンスを表示する。
+     * 「tool_calls が空」の原因が接続・モデル選択・モデル出力形式のどれかを切り分けるための診断用。
+     */
+    private void llmProbe() {
+        out.println("----- LLM probe -----");
+        out.println("endpoint   : " + config.endpoint());
+        out.println("model      : " + config.model());
+        out.println("toolChoice : " + config.toolChoice());
+
+        Map<String, Object> properties = new LinkedHashMap<String, Object>();
+        properties.put("message", ToolDefinition.stringProperty("echo する文字列"));
+        ToolDefinition echo = new ToolDefinition("echo", "入力をそのまま返すツール",
+                ToolDefinition.objectSchema(properties, Collections.singletonList("message")),
+                Collections.singletonList("message"));
+
+        List<LlmMessage> messages = new ArrayList<LlmMessage>();
+        messages.add(LlmMessage.system("You must call the echo tool. Never answer in plain text."));
+        messages.add(LlmMessage.user("Call the echo tool with message=hello."));
+        LlmRequest request = new LlmRequest(config.model(), messages, 0.0, 256, null,
+                Collections.singletonList(echo), config.toolChoice());
+
+        HttpLlmClient client = new HttpLlmClient(config);
+        LlmRawResponse raw = client.chatDetail(request);
+        LlmResponse response = raw.response();
+
+        out.println("----- raw response (max 3000 chars) -----");
+        out.println(abbreviate(raw.rawBody(), 3000));
+        out.println("----- parsed -----");
+        out.println("finish_reason       : " + response.finishReason());
+        out.println("tool_calls          : " + response.toolCalls().size());
+        for (ToolCall call : response.toolCalls()) {
+            out.println("  - " + call.describe());
+        }
+        out.println("content             : " + abbreviate(response.content(), 500));
+
+        ToolCallExtractor.Result recovered = ToolCallExtractor.extract(response.content());
+        if (!recovered.calls().isEmpty()) {
+            out.println("[OK] content から " + recovered.calls().size()
+                    + " 件の tool 呼び出しを復元できます: " + recovered.warning());
+            for (ToolCall call : recovered.calls()) {
+                out.println("  - " + call.describe());
+            }
+            out.println("→ agent.toolCallRecovery=true なら Agent モードで自動実行されます。");
+        } else if (!recovered.suspicion().isEmpty()) {
+            out.println("[WARN] " + recovered.suspicion());
+        } else {
+            out.println("[INFO] structured な tool_calls も、復元可能なテキストもありません。");
+            out.println("       → モデルがツールを使わない／LM Studio の tool 対応設定を確認してください。");
+        }
+    }
+
+    private static String abbreviate(String text, int limit) {
+        if (text == null) {
+            return "";
+        }
+        return text.length() <= limit ? text : text.substring(0, limit) + "...";
+    }
+
+    private void terms() throws IOException {
+        TermDictionary dictionary = TermDictionary.load(config.termRoot());
+        out.println("术语库: " + config.termRoot().toAbsolutePath().normalize());
+        for (TermDictionary.TermEntry entry : dictionary.entries()) {
+            out.println("  " + entry + "  [" + entry.source() + "]");
+        }
+    }
+
+    private void apiList() throws IOException {
+        ApiCatalog catalog = ApiCatalog.load(config.apiRoot());
+        out.println("API 库: " + config.apiRoot().toAbsolutePath().normalize());
+        for (ApiCatalog.ApiEntry entry : catalog.entries()) {
+            out.println("  " + entry.className() + "." + entry.signature()
+                    + " — " + entry.description());
+        }
+    }
+
+    /** 5 ステップ Pipeline を実行し、术语・API・自己修正・出力先を表示する。 */
+    private void featureGen(Map<String, String> options) {
+        String featureName = options.get("feature");
+        if (StrUtil.isBlank(featureName)) {
+            throw new IllegalArgumentException("--feature が必要です");
+        }
+        FeatureGenState state = new FeatureCodegenPipeline().run(featureName, context);
+        out.println("Feature Pipeline 完了: " + state.targetPath());
+        out.println("フェーズ      : " + state.phase());
+        out.println("抽出术语      : " + state.terms().size() + " 件");
+        out.println("匹配 API      : " + state.apis().size() + " 件");
+        out.println("自己修正      : " + (state.corrected() ? "実施（1 回）" : "不要"));
+        if (!state.violations().isEmpty()) {
+            out.println("[WARN] 残存違反: " + state.violations());
+        }
+        out.println("----- 実行トレース -----");
+        for (com.walk_nie.bizgen.agent.pipeline.StageTrace trace : context.traces()) {
+            out.println("  " + trace);
+        }
     }
 
     private void agentGen(Map<String, String> options) throws IOException {

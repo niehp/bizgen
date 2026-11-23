@@ -14,7 +14,7 @@ public final class SearchExistingCodeStage implements Stage<JavaGenState, JavaGe
 
     @Override
     public String id() {
-        return "06-search-existing-code";
+        return "08-search-existing-code";
     }
 
     @Override

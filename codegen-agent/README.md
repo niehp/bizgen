@@ -86,7 +86,7 @@ preview sql --type select --desc "..." --tables "受注,顧客" [--shape "..."]
 preview agent                         查看 Agent 工具定义与 system prompt 模板
 search --feature <md名>               只执行既有代码检索，不调用模型
 tools                                 查看已注册的 function tools 与上限
-java-gen --feature <md名>             单发流水线生成 Java（不经过 Agent 循环）
+java-gen --feature <md名>             12 阶段 Java 生成框架（含术语/API/自检，不经过 Agent 循环）
 sql-gen --type select|update|delete --desc "..." --tables "受注,顧客"
          [--shape <SQL雛形>] [--prompt <名>] [--var k=v] [--out <file>]
 agent-gen --feature <md名>            多轮 Agent + function tool 生成 Java
@@ -106,7 +106,9 @@ usecase md 示例见 `md/03-usecase/sample-order-query-service.md`。front matte
 - 其余 key 自动作为变量
 - **保存路径不在 MD 中指定**，统一由配置文件 `path.generatedJavaRoot` 决定
 
-流水线（9 阶段）：`加载功能md → 加载设计md → 变量展开 → 意图分类(LLM/代码) → 语义映射(LLM) → 既有代码类似检索(代码) → 代码草稿(LLM) → 日语注释润色(LLM) → 校验写盘(代码)`。
+流水线（12 阶段）：`加载功能md → 加载设计md → 变量展开 → 术语提取(代码) → API匹配(代码) → 意图分类(LLM/代码) → 语义映射(LLM) → 既有代码类似检索(代码) → 代码草稿(LLM) → 日语注释润色(LLM) → 静态校验+一次自我修正(LLM) → 校验写盘(代码)`。
+
+`java-gen` 已把 5 步 Feature Pipeline 的能力集成进主框架：术语库与 API 库在代码侧筛选后注入 prompt，生成结果先抽取纯 Java 再静态校验，有违规则只自我修正一次，剩余问题作为 `[WARN]` 交人工审核。
 
 ### 既有代码类似检索（新增）
 
@@ -116,6 +118,14 @@ usecase md 示例见 `md/03-usecase/sample-order-query-service.md`。front matte
 - 排除当前要修改的目标文件；单个片段与总字符数分别受 `gen.maxSimilarFiles` / `gen.maxSimilarCodeChars` 限制，超限截断并标注「省略」
 - 结果以 `{{similarCode}}` 注入 `md/prompt/java-generate.md`，作为「既有项目写法参考」，prompt 明确禁止把类似代码里的功能带入规格外
 - 可用 `search --feature <md名>` 单独查看检索结果，`preview java --feature <md名>` 查看最终送模型的完整 prompt
+
+### 术语 / API 注入与静态校验（集成自 Feature Pipeline）
+
+- `04-extract-terms`：从展开后的功能 MD 抽取业务词汇，从 `path.termRoot` 的 `日本語 -> 英語` txt/md 中确定性匹配，结果经 `{{termsText}}` 注入 prompt
+- `05-match-apis`：用「功能 MD + 术语日英」查询 `path.apiRoot` 的 API 库，按 `gen.apiTopN` 取既存方法签名，经 `{{apisText}}` 注入；prompt 明确禁止调用表外 API
+- `11-validate-correct`：抽取纯 Java 块，检查全角/控制字符、package/class 结构、标识符中的日语；`ADD_METHOD` / `MODIFY_METHOD` 只校验方法片。违规时用 `md/prompt/java-self-correct.md` 只请求一次修正；修正后仍不合规则保留 `[WARN]`，不循环
+- 日语 Javadoc 与字符串字面量不算违规：非法字符检查只作用于屏蔽注释/字符串后的代码区域
+- 术语分析、API 匹配、修正请求统一由 `generator/CodegenSupport` 提供，`java-gen` 与 `feature-gen` 共用同一套判定
 
 生成物包含 `package-info.java`（标准包注释）与类文件（类/字段/方法 Javadoc，日语，写清「做了什么、为什么」）。
 
@@ -187,6 +197,81 @@ agent-trace
 `preview agent` 可查看工具定义与 system prompt 模板，`tools` 只看工具列表——两者都不调用模型。Agent 模式下**写盘仍然只由代码侧的最终阶段执行**，且仍受 `gen.reviewRequired` 约束。
 
 prompt 模板：`md/prompt/agent-java.md`、`md/prompt/agent-sql.md`。
+
+### 工具调用没有出现时（Qwen2.5-Coder + LM Studio）
+
+Qwen2.5-Coder 不在 LM Studio 的 **native tool use** 支持列表中，常把工具调用当作普通文本写进 `message.content`，而 `tool_calls` 字段为空。此时 Agent 会把那段文本当成最终回答，看起来就是"没有调用工具"。
+
+排查步骤：
+
+1. 确认 LM Studio 本地服务器已开启，且配置指向它的端口与模型 ID：
+
+   ```properties
+   llm.baseUrl=http://127.0.0.1:1234/v1
+   llm.model=qwen2.5-coder-14b-instruct   # 以 /v1/models 返回值为准
+   ```
+
+2. 运行 `llm-probe`，它会发一次带 `echo` 工具的最小请求并打印原始响应、结构化 `tool_calls`、`content`，以及是否能从文本中恢复工具调用。
+
+3. 若 `content` 里有 `<tool_call>{...}</tool_call>`、`[TOOL_REQUEST]{...}[END_TOOL_REQUEST]` 或 JSON 代码块，`agent.toolCallRecovery=true`（默认）会在 Agent 模式下自动把它提升为真正的工具调用，`agent-trace` 中会显示 `[WARN]` 说明发生了恢复。若不想启用该兜底，设为 `false`。
+
+4. 若原始响应中既没有结构化调用也没有上述文本，说明模型没有打算调用工具：可尝试把 `llm.toolChoice` 设为 `required`、换用 LM Studio 标记为原生支持工具调用的模型（如 Qwen2.5-7B-Instruct、Llama-3.1-8B-Instruct），或提高量化等级（Q4_K_M → Q5_K_M）。
+
+## 5 ステップ Feature Pipeline（feature-gen）
+
+`feature-gen --feature <md名>` は、機能描写 MD を入力に次の 5 ステージを固定順で実行する。
+`agent-gen` が「モデルが tool を選ぶ」多輪型なのに対し、こちらは**全部コード側で決める直線型**パイプライン。
+
+| ステップ | ステージ | 担当 | 内容 |
+| --- | --- | --- | --- |
+| 1 | `01-extract-terms` | CODE | 機能 md の変数を展開し、业务词汇を抽出して术语库から日英マッピングを引く |
+| 2 | `02-match-apis` | CODE | 機能 md + 术语をクエリに、API 库から関連する既存クラス／メソッドシグネチャを選ぶ |
+| 3 | `03-generate-java` | LLM | 機能 MD + 术语 + API + 日本語開発規約を structured prompt にして Java を生成 |
+| 4 | `04-validate-correct` | LLM | 纯 Java コードを抽出し、非法文字・术语違反を検査。違反なら Self-Correction を 1 回だけ依頼 |
+| 5 | `05-write-file` | CODE | パッケージ構造に従って UTF-8 で `output/src/main/java/...` に落盤 |
+
+> 同じ 5 ステップの能力は `java-gen`（12 ステージ本流）にも統合済みです。术语/API/自己修正の判定は `CodegenSupport` を共用しているため、どちらを呼んでも同じルールが適用されます。`feature-gen` は「機能 MD だけから 1 クラスを生成して `featureOutputRoot` に落盤する」簡易モードとして残しています。
+
+### 术语库と API 库
+
+- 术语库: `path.termRoot`（既定 `md/term`）直下の `.txt` / `.md` を全部読み込む。1 行 `日本語 -> 英語`。長い語が優先され、Javadoc の日本語は違反扱いしない。
+- API 库: `path.apiRoot`（既定 `md/api`）直下の `.md` を 1 クラスとして読み、`# クラス名` と表形式の `| シグネチャ | 説明 |` を解釈する。 Hits 上位 `gen.apiTopN` 件だけを模型に渡す。
+- どちらも决定论的文字列マッチングで、LLM には「どの术语／API を使うか」を選ばせない。
+
+### 自己修正と出力
+
+- 検査項目: 全角スペース・全角記号・BOM・制御文字、`package` / `class` 宣言の欠落、識別子中の日本語（术语表の英語名を提案）。
+- 違反時に `md/prompt/feature-self-correct.md` で 1 回だけ再生成し、それ以上はループしない。残存違反は `[WARN]` として表示し、人間レビューに委ねる。
+- 出力先は `path.featureOutputRoot`（既定 `output/src/main/java`）。コード内の `package` 宣言からディレクトリを作る。
+
+### コマンド
+
+```
+feature-gen --feature sample-order-query-service
+terms                     # 术语库の一覧（LLM 不使用）
+api-list                  # API 库の一覧（LLM 不使用）
+pipeline feature          # 5 ステージの構成を表示
+```
+
+設定項目は `path.termRoot` / `path.apiRoot` / `path.featureOutputRoot` / `gen.apiTopN` / `gen.selfCorrect`。
+prompt テンプレートは `md/prompt/feature-codegen.md` と `md/prompt/feature-self-correct.md`。
+
+## テンプレート一括填充（template-fill）
+
+`template` コマンドが「空のテンプレートを人手で書き始めるためのコピー」だったのに対し、`template-fill` は**テンプレートを LLM に 1 ファイルずつ渡して空欄を埋めさせる**機能です。
+
+- 入力: `path.templateFillRoot` 配下の**すべてのファイルを再帰的に**列挙（拡張子問わず、パス順に処理、`templateFill.maxFiles` 件まで）
+- 填充: 各ファイルの `{{...}}` を検出し、`md/prompt/template-fill.md` で「テンプレート本文 + プレースホルダ一覧 + 参照情報」を渡して LLM に生成させる
+- 参照情報: `--feature <md名>` で機能描写 md を展開して渡す。`--var key=value` / `--var.key=value` で追加変数も渡せる
+- 出力: `path.templateFillOutputRoot` 配下に**元の相対ディレクトリ構造を維持**して UTF-8 で書き出す（既存ファイルは上書き）
+- 安全策: 出力先を入力ルート配下に置くことは禁止。填充後にプレースホルダが残っていれば `[WARN]` で表示するが、自動再試行はしない
+
+```
+template-fill --feature sample-order-query-service --var.company=自社名
+```
+
+設定項目: `path.templateFillRoot` / `path.templateFillOutputRoot` / `templateFill.prompt` / `templateFill.maxFiles`。
+prompt を差し替えれば、Java / XML / JS / Markdown などテンプレートの種類ごとに填充ルールを変えられます（ファイルごとに prompt を選ぶ仕組みではありません）。
 
 ## 注意
 

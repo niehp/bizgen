@@ -19,20 +19,27 @@ public final class LlmRequest {
     private final int maxTokens;
     private final Integer seed;
     private final List<ToolDefinition> tools;
+    private final String toolChoice;
 
     public LlmRequest(String model, List<LlmMessage> messages, double temperature,
                       int maxTokens, Integer seed) {
-        this(model, messages, temperature, maxTokens, seed, new ArrayList<ToolDefinition>());
+        this(model, messages, temperature, maxTokens, seed, new ArrayList<ToolDefinition>(), "auto");
     }
 
     public LlmRequest(String model, List<LlmMessage> messages, double temperature,
                       int maxTokens, Integer seed, List<ToolDefinition> tools) {
+        this(model, messages, temperature, maxTokens, seed, tools, "auto");
+    }
+
+    public LlmRequest(String model, List<LlmMessage> messages, double temperature,
+                      int maxTokens, Integer seed, List<ToolDefinition> tools, String toolChoice) {
         this.model = model;
         this.messages = messages == null ? new ArrayList<LlmMessage>() : messages;
         this.temperature = temperature;
         this.maxTokens = maxTokens;
         this.seed = seed;
         this.tools = tools == null ? new ArrayList<ToolDefinition>() : tools;
+        this.toolChoice = toolChoice == null || toolChoice.trim().isEmpty() ? "auto" : toolChoice.trim();
     }
 
     public String model() {
@@ -59,6 +66,10 @@ public final class LlmRequest {
         return tools;
     }
 
+    public String toolChoice() {
+        return toolChoice;
+    }
+
     /** 実際にモデルへ渡す内容を可視化する（プレビュー / 監査用）。 */
     public String describe() {
         StringBuilder out = new StringBuilder();
@@ -67,6 +78,7 @@ public final class LlmRequest {
                 .append(" / maxTokens: ").append(maxTokens)
                 .append(" / seed: ").append(seed).append('\n');
         if (!tools.isEmpty()) {
+            out.append("tool_choice: ").append(toolChoice).append('\n');
             out.append("tools: ");
             for (ToolDefinition definition : tools) {
                 out.append(definition.name()).append(' ');
@@ -123,6 +135,7 @@ public final class LlmRequest {
                 serializedTools.add(definition.toJsonObject());
             }
             root.put("tools", serializedTools);
+            root.put("tool_choice", toolChoice);
         }
         return Json.stringify(root);
     }

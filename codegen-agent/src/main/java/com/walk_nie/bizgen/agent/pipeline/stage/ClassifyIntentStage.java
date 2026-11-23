@@ -26,7 +26,7 @@ public final class ClassifyIntentStage implements Stage<JavaGenState, JavaGenSta
 
     @Override
     public String id() {
-        return "04-classify-intent";
+        return "06-classify-intent";
     }
 
     @Override
@@ -36,7 +36,7 @@ public final class ClassifyIntentStage implements Stage<JavaGenState, JavaGenSta
 
     @Override
     public JavaGenState execute(JavaGenState state, PipelineContext context) {
-        state.assertPhase(JavaGenState.Phase.VARIABLES_RESOLVED);
+        state.assertPhase(JavaGenState.Phase.APIS_MATCHED);
         ResolvedFeature resolved = state.resolved();
 
         String declared = resolved.spec().mode();

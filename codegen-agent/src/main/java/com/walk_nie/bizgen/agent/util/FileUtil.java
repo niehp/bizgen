@@ -56,6 +56,18 @@ public final class FileUtil {
         return result;
     }
 
+    /** 指定ディレクトリ直下の通常ファイルをファイル名順に返す。 */
+    public static List<Path> listFiles(Path dir) throws IOException {
+        if (!Files.isDirectory(dir)) {
+            return Collections.emptyList();
+        }
+        List<Path> result = new ArrayList<Path>();
+        try (java.util.stream.Stream<Path> stream = Files.list(dir)) {
+            stream.filter(Files::isRegularFile).sorted().forEach(result::add);
+        }
+        return result;
+    }
+
     /** 拡張子を除いたファイル名を返す。 */
     public static String baseName(Path path) {
         String name = path.getFileName().toString();

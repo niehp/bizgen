@@ -26,7 +26,7 @@ public final class GenerateJavaDraftStage implements Stage<JavaGenState, JavaGen
 
     @Override
     public String id() {
-        return "07-generate-java-draft";
+        return "09-generate-java-draft";
     }
 
     @Override
@@ -56,6 +56,8 @@ public final class GenerateJavaDraftStage implements Stage<JavaGenState, JavaGen
             variables.put("featureBody", resolved.featureBody());
             variables.put("designDocs", resolved.designText());
             variables.put("similarCode", state.similarCode().promptText());
+            variables.put("termsText", state.termsText());
+            variables.put("apisText", state.apisText());
             String prompt = variables.resolveText(context.repository().prompt("java-generate"));
 
             LlmRequest request = new LlmRequest(config.model(),

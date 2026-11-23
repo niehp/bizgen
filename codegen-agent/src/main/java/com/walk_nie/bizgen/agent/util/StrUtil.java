@@ -37,7 +37,11 @@ public final class StrUtil {
         if (closing >= 0) {
             body = body.substring(0, closing);
         }
-        return body.stripTrailing() + "\n";
+        int end = body.length();
+        while (end > 0 && Character.isWhitespace(body.charAt(end - 1))) {
+            end--;
+        }
+        return body.substring(0, end) + "\n";
     }
 
     /**

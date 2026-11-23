@@ -1,8 +1,12 @@
 package com.walk_nie.bizgen.agent.variable;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -73,6 +77,23 @@ public final class VariableTable {
         }
         matcher.appendTail(out);
         return out.toString();
+    }
+
+    /** テキスト中に現れるプレースホルダ式を初出順に返す（重複なし、未解決のまま）。 */
+    public static List<String> placeholders(String text) {
+        List<String> result = new ArrayList<String>();
+        if (text == null || text.isEmpty()) {
+            return result;
+        }
+        Set<String> seen = new LinkedHashSet<String>();
+        Matcher matcher = PLACEHOLDER.matcher(text);
+        while (matcher.find()) {
+            String expression = matcher.group(1).trim();
+            if (!expression.isEmpty() && seen.add(expression)) {
+                result.add(expression);
+            }
+        }
+        return result;
     }
 
     private String resolveExpression(String expression) {
