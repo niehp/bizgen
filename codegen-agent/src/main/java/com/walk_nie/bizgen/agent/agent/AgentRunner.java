@@ -174,6 +174,7 @@ public final class AgentRunner {
         return "com.walk_nie.bizgen.generated";
     }
 
+    /** 既存 Java を読み取る。パスは設定ルート配下に限定し、脱出は許可しない（決定論的）。 */
     private String readExistingCode(ResolvedFeature resolved) throws IOException {
         if (context.config().existingJavaRoot() == null || StrUtil.isBlank(resolved.spec().targetFile())) {
             return "";

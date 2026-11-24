@@ -112,7 +112,17 @@ public final class ValidateWriteStage implements Stage<JavaGenState, JavaGenStat
             }
         }
         if (replacement == null) {
-            replacement = methods.get(0).text();
+            StringBuilder methodNames = new StringBuilder();
+            for (JavaSourceWriter.MethodBlock method : methods) {
+                if (methodNames.length() > 0) {
+                    methodNames.append(", ");
+                }
+                methodNames.append(method.name());
+            }
+            // 生成側のメソッド名が違うのに最初のメソッドで上書きすると、
+            // 無関係なメソッドを壊すため、ここで必ず失敗させる（人間レビューへ回す）。
+            throw new IllegalArgumentException("生成コードに置換対象メソッドがありません: "
+                    + methodName + "（生成されたメソッド: " + methodNames + "）");
         }
         return JavaSourceWriter.replaceMethod(existing, methodName, replacement);
     }

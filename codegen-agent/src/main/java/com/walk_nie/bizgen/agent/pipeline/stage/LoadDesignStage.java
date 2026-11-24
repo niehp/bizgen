@@ -23,7 +23,7 @@ public final class LoadDesignStage implements Stage<JavaGenState, JavaGenState> 
     public JavaGenState execute(JavaGenState state, PipelineContext context) {
         state.assertPhase(JavaGenState.Phase.FEATURE_LOADED);
         try {
-            state.setDesigns(context.repository().loadDesigns(state.spec().designRefs()));
+            state.setDesigns(context.repository().loadDesigns(state.spec()));
             state.advance(JavaGenState.Phase.DESIGNS_LOADED);
             return state;
         } catch (IOException e) {

@@ -107,12 +107,14 @@ usecase md 示例见 `md/03-usecase/sample-order-query-service.md`。front matte
 
 - `mode: NEW_FILE | ADD_METHOD | MODIFY_METHOD`：显式指定时由代码决定意图，不调用分类模型
 - `targetFile:`：既有项目相对路径
-- `targetMethod:`：`MODIFY_METHOD` 的目标方法名
-- `designs:`：按需加载的设计文档引用，如 `java-common/naming-convention`
+- `targetMethod:`：`MODIFY_METHOD` 的目标方法名；生成代码里必须含同名方法，否则直接报错交人工审核，不会退化为改写第一个方法
+- `designs:`：设计文档引用，如 `java-common/naming-convention`（显式引用始终加载）
 - 其余 key 自动作为变量
 - **保存路径不在 MD 中指定**，统一由配置文件 `path.generatedJavaRoot` 决定
 
-流水线（12 阶段）：`加载功能md → 加载设计md → 变量展开 → 术语提取(代码) → API匹配(代码) → 意图分类(LLM/代码) → 语义映射(LLM) → 既有代码类似检索(代码) → 代码草稿(LLM) → 日语注释润色(LLM) → 静态校验+一次自我修正(LLM) → 校验写盘(代码)`。
+五级设计目录（`md/01-java-common` ~ `md/05-method`）**不再全量加载**：先加载 `designs:` 显式引用，再按功能 MD 正文的日语/英语关键词自动匹配，最多追加 `gen.maxAutoDesigns=6` 份（设为 0 可关闭）。加载顺序固定为「相关度降序 → 级别升序 → 路径升序」，变量在送入模型前统一展开。
+
+流水线（13 阶段）：`加载功能md → 加载设计md → 变量展开 → 参考资料加载(spec) → 术语提取(代码) → API匹配(代码) → 意图分类(LLM/代码) → 语义映射(LLM) → 既有代码类似检索(代码) → 代码草稿(LLM) → 日语注释润色(LLM) → 静态校验+一次自我修正(LLM) → 校验写盘(代码)`。
 
 `java-gen` 已把 5 步 Feature Pipeline 的能力集成进主框架：术语库与 API 库在代码侧筛选后注入 prompt，生成结果先抽取纯 Java 再静态校验，有违规则只自我修正一次，剩余问题作为 `[WARN]` 交人工审核。
 
@@ -123,6 +125,8 @@ usecase md 示例见 `md/03-usecase/sample-order-query-service.md`。front matte
 - 对配置目录下的 `.java` 文件做确定性关键词打分（文件名命中加权、单关键词最多计 5 次），按「分数降序 + 路径升序」排序，取 Top-N
 - 排除当前要修改的目标文件；单个片段与总字符数分别受 `gen.maxSimilarFiles` / `gen.maxSimilarCodeChars` 限制，超限截断并标注「省略」
 - 结果以 `{{similarCode}}` 注入 `md/prompt/java-generate.md`，作为「既有项目写法参考」，prompt 明确禁止把类似代码里的功能带入规格外
+- **无命中时记录输入**：标准输出打印 `[similar-code][no-hit]`，同时把功能 MD 名称、关键词、检索根目录、扫描文件数与输入正文追加到 `out/logs/similar-code.log`（UTF-8）；日志失败不会中断生成
+- `flow-gen` 的每个 NEW_CODE 块会按该块描述单独再做一次类似检索，并覆盖该块的 `{{similarCode}}`；不是复用全局检索结果
 - 可用 `search --feature <md名>` 单独查看检索结果，`preview java --feature <md名>` 查看最终送模型的完整 prompt
 
 ### 术语 / API 注入与静态校验（集成自 Feature Pipeline）

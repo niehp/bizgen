@@ -51,7 +51,7 @@ public final class LoadFeatureAndTermsStage implements Stage<FeatureGenState, Fe
             state.setBusinessWords(analysis.words());
             state.setTerms(analysis.entries());
 
-            List<MdDoc> designs = context.repository().loadDesigns(spec.designRefs());
+            List<MdDoc> designs = context.repository().loadDesigns(spec);
             StringBuilder designText = new StringBuilder();
             for (MdDoc doc : designs) {
                 designText.append("## ").append(doc.name()).append('\n')

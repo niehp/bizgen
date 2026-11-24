@@ -54,6 +54,7 @@ public final class AgentConfig {
     private final int apiTopN;
     private final boolean selfCorrect;
     private final int maxBlocks;
+    private final int maxAutoDesigns;
 
     private AgentConfig(Properties properties) {
         this.baseUrl = value(properties, "llm.baseUrl", "http://127.0.0.1:11434/v1");
@@ -108,6 +109,8 @@ public final class AgentConfig {
         this.apiTopN = Integer.parseInt(value(properties, "gen.apiTopN", "8"));
         this.selfCorrect = Boolean.parseBoolean(value(properties, "gen.selfCorrect", "true"));
         this.maxBlocks = Integer.parseInt(value(properties, "gen.maxBlocks", "12"));
+        this.maxAutoDesigns = Math.max(0,
+                Integer.parseInt(value(properties, "gen.maxAutoDesigns", "6")));
     }
 
     private static String value(Properties properties, String key, String defaultValue) {
@@ -252,6 +255,11 @@ public final class AgentConfig {
         return maxBlocks;
     }
 
+    /** 機能 md 本文との一致で自動的に追加する設計 md の上限（0 で無効）。 */
+    public int maxAutoDesigns() {
+        return maxAutoDesigns;
+    }
+
     public int maxTables() {
         return maxTables;
     }
@@ -318,7 +326,7 @@ public final class AgentConfig {
                 + "agentLimits: rounds=" + agentMaxRounds + ", toolCalls=" + agentMaxToolCalls
                 + ", sameCall=" + agentMaxSameCall + "\n"
                 + "featureGen: apiTopN=" + apiTopN + ", selfCorrect=" + selfCorrect
-                + ", maxBlocks=" + maxBlocks + "\n"
+                + ", maxBlocks=" + maxBlocks + ", maxAutoDesigns=" + maxAutoDesigns + "\n"
                 + "reviewRequired: " + reviewRequired;
     }
 }

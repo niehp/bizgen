@@ -3,6 +3,7 @@ package com.walk_nie.bizgen.agent.pipeline.stage;
 import com.walk_nie.bizgen.agent.generator.java.ExistingCodeSearcher;
 import com.walk_nie.bizgen.agent.generator.java.JavaGenState;
 import com.walk_nie.bizgen.agent.generator.java.SimilarCodeResult;
+import com.walk_nie.bizgen.agent.generator.java.SimilarCodeSearchLog;
 import com.walk_nie.bizgen.agent.pipeline.PipelineContext;
 import com.walk_nie.bizgen.agent.pipeline.Stage;
 
@@ -30,6 +31,10 @@ public final class SearchExistingCodeStage implements Stage<JavaGenState, JavaGe
                 state.resolved(),
                 state.semanticMap(),
                 state.resolved().spec().targetFile());
+        if (result.snippets().isEmpty()) {
+            SimilarCodeSearchLog.recordNoHit(context.config(), "feature",
+                    state.resolved().spec().title(), state.resolved().featureBody(), result);
+        }
         state.setSimilarCode(result);
         state.advance(JavaGenState.Phase.SIMILAR_CODE_FOUND);
         return state;

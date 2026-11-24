@@ -9,12 +9,16 @@ import com.walk_nie.bizgen.agent.api.ApiCatalog;
 import com.walk_nie.bizgen.agent.config.AgentConfig;
 import com.walk_nie.bizgen.agent.generator.flow.CodePlan;
 import com.walk_nie.bizgen.agent.generator.flow.FlowGenState;
+import com.walk_nie.bizgen.agent.generator.java.ExistingCodeSearcher;
 import com.walk_nie.bizgen.agent.generator.java.JavaGenState;
+import com.walk_nie.bizgen.agent.generator.java.SimilarCodeResult;
+import com.walk_nie.bizgen.agent.generator.java.SimilarCodeSearchLog;
 import com.walk_nie.bizgen.agent.llm.LlmMessage;
 import com.walk_nie.bizgen.agent.llm.LlmRequest;
 import com.walk_nie.bizgen.agent.llm.LlmResponse;
 import com.walk_nie.bizgen.agent.pipeline.PipelineContext;
 import com.walk_nie.bizgen.agent.pipeline.Stage;
+import com.walk_nie.bizgen.agent.util.KeywordExtractor;
 import com.walk_nie.bizgen.agent.util.StrUtil;
 import com.walk_nie.bizgen.agent.variable.VariableTable;
 
@@ -90,10 +94,22 @@ public final class ResolveBlocksStage implements Stage<FlowGenState, FlowGenStat
         }
     }
 
-    /** 新規コードブロック: API を使わない部分をモデルに作らせる。 */
+    /** 新規コードブロック: ブロック単位で類似例を探し、API を使わない部分をモデルに作らせる。 */
     private String generateNewCode(CodePlan.Block block, FlowGenState state, PipelineContext context) {
         AgentConfig config = context.config();
         VariableTable variables = variables(block, state, context);
+
+        // ステップ 4: 機能ブロックごとに類似コードを探す。全体検索の結果を使い回さない。
+        List<String> keywords = KeywordExtractor.extract(
+                block.description() + " " + state.plan().className(), 20);
+        SimilarCodeResult similar = ExistingCodeSearcher.searchByKeywords(
+                config, keywords, state.java().resolved().spec().targetFile());
+        if (similar.snippets().isEmpty()) {
+            SimilarCodeSearchLog.recordNoHit(config, "block-" + block.index(),
+                    state.java().resolved().spec().title(), block.description(), similar);
+        }
+        variables.put("similarCode", similar.promptText());
+
         try {
             String prompt = variables.resolveText(context.repository().prompt("code-block-new"));
             LlmRequest request = new LlmRequest(config.model(),
