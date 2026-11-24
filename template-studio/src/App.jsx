@@ -10,6 +10,7 @@ import DbStudio from './db/DbStudio.jsx';
 import ExcelStudio from './excel/ExcelStudio.jsx';
 import JavaStudio from './java/JavaStudio.jsx';
 import PageItemStudio from './pageitem/PageItemStudio.jsx';
+import WidgetSpacingStudio from './widget/WidgetSpacingStudio.jsx';
 
 const viewFromHash = () => {
   const hash = window.location.hash.replace(/^#\/?/, '');
@@ -17,6 +18,7 @@ const viewFromHash = () => {
   if (hash === 'excel' || hash === 'mapping') return 'excel';
   if (hash === 'java' || hash === 'code') return 'java';
   if (hash === 'pageitem' || hash === 'pageitem-excel') return 'pageitem';
+  if (hash === 'spacing' || hash === 'widget-spacing' || hash === 'widget') return 'spacing';
   return 'template';
 };
 
@@ -74,7 +76,8 @@ export default function App() {
     window.location.hash = next === 'db' ? '#db'
       : next === 'excel' ? '#excel'
         : next === 'java' ? '#java'
-          : next === 'pageitem' ? '#pageitem' : '#template';
+          : next === 'pageitem' ? '#pageitem'
+            : next === 'spacing' ? '#widget-spacing' : '#template';
     setView(next);
   }, []);
 
@@ -281,6 +284,11 @@ export default function App() {
             className={`nav-item ${view === 'pageitem' ? 'active' : ''}`}
             onClick={() => go('pageitem')}
           >页面项目 → Maskat widget</button>
+          <button
+            type="button"
+            className={`nav-item ${view === 'spacing' ? 'active' : ''}`}
+            onClick={() => go('spacing')}
+          >Widget 间距计算</button>
         </nav>
 
         {view === 'template' ? <div className="topbar-actions">
@@ -320,7 +328,9 @@ export default function App() {
                   ? 'JAR / 全ファイル → SQLite + FTS5 索引 → 9 項目検索（増分スキャン · 多階層 Group · 包名/后缀/大小写/数据源过滤）'
                   : view === 'pageitem'
                     ? '图片/剪贴板 → 项目名 TOP LEFT WIDTH · Excel 双 Sheet → widget 列表 → Maskat widget（/maskat-spec 驱动 · 自动保存 JSON）'
-                    : 'テンプレート入力 → 変数を TABLE で入力 → 全件のコードを表示（6 種類の命名規則変数を自動生成）'}
+                    : view === 'spacing'
+                      ? 'XML widget 列表 → 指定间隔 → 逐行重算 left → 复制结果回 Maskat 定义'
+                      : 'テンプレート入力 → 変数を TABLE で入力 → 全件のコードを表示（6 種類の命名規則変数を自動生成）'}
           </span>
         </div>}
       </header>
@@ -329,7 +339,8 @@ export default function App() {
         : view === 'excel' ? <ExcelStudio onStatus={setStatus} />
           : view === 'java' ? <JavaStudio onStatus={setStatus} />
             : view === 'pageitem' ? <PageItemStudio onStatus={setStatus} />
-              : <main className="workspace">
+              : view === 'spacing' ? <WidgetSpacingStudio onStatus={setStatus} />
+                : <main className="workspace">
         <TemplateEditor template={template} onChange={setTemplate} extraction={extraction} />
         <VariableForm
           variables={extraction.variables}

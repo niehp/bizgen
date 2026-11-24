@@ -1,11 +1,13 @@
 package com.walk_nie.bizgen.agent.agent;
 
+import com.walk_nie.bizgen.agent.agent.tool.FindApiTool;
 import com.walk_nie.bizgen.agent.agent.tool.ListDesignDocsTool;
 import com.walk_nie.bizgen.agent.agent.tool.LoadDesignDocTool;
 import com.walk_nie.bizgen.agent.agent.tool.LoadTableSchemaTool;
 import com.walk_nie.bizgen.agent.agent.tool.ListTablesTool;
 import com.walk_nie.bizgen.agent.agent.tool.ReadJavaFileTool;
 import com.walk_nie.bizgen.agent.agent.tool.SearchSimilarCodeTool;
+import com.walk_nie.bizgen.agent.generator.CodegenSupport;
 import com.walk_nie.bizgen.agent.generator.java.JavaDraft;
 import com.walk_nie.bizgen.agent.generator.java.JavaGenState;
 import com.walk_nie.bizgen.agent.generator.java.ResolvedFeature;
@@ -31,6 +33,7 @@ import com.walk_nie.bizgen.agent.variable.VariableTable;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Collections;
+import java.util.List;
 
 /**
  * Agent モードの生成ランナー。
@@ -53,7 +56,8 @@ public final class AgentRunner {
                 .register(new ListDesignDocsTool())
                 .register(new LoadDesignDocTool())
                 .register(new SearchSimilarCodeTool())
-                .register(new ReadJavaFileTool());
+                .register(new ReadJavaFileTool())
+                .register(new FindApiTool());
         this.sqlTools = new ToolRegistry()
                 .register(new ListTablesTool())
                 .register(new LoadTableSchemaTool())
@@ -70,6 +74,11 @@ public final class AgentRunner {
 
     public ToolRegistry sqlTools() {
         return sqlTools;
+    }
+
+    /** モデルが find_api で参照した API（人工レビュー用）。 */
+    public List<com.walk_nie.bizgen.agent.api.ApiCatalog.ApiEntry> selectedApis() {
+        return context.selectedApis();
     }
 
     /** Java 生成。Agent の最終回答を草稿として受け取り、Deterministic な検証・書き出しを行う。 */
@@ -95,10 +104,17 @@ public final class AgentRunner {
         variables.put("designDocs", resolved.designText());
         variables.put("featureBody", resolved.featureBody());
         variables.put("similarCode", state.similarCode().promptText());
+        CodegenSupport.TermAnalysis termAnalysis =
+                CodegenSupport.analyzeTerms(resolved.featureBody(), pipeline.config());
+        variables.put("termsText", termAnalysis.text());
+        variables.put("apisText", CodegenSupport.apisText(
+                CodegenSupport.matchApis(resolved.featureBody(), termAnalysis.entries(), pipeline.config())));
 
         String system = variables.resolveText(pipeline.repository().prompt("agent-java"));
         String user = "ユースケース [" + featureName + "] の Java コードを生成してください。"
-                + "まず必要な function tool を呼び、情報が揃ったら规定の 2 セクションで出力してください。";
+                + "まず必要な function tool を呼び、情報が揃ったら规定の 2 セクションで出力してください。"
+                + "API を使う場合は find_api で実在のシグネチャを確認し、"
+                + "API 呼び出しと新規コードを組み合わせて 1 つのクラスを作ってください。";
 
         AgentLoop loop = new AgentLoop(javaTools, context);
         AgentResult result = loop.run(system, user);

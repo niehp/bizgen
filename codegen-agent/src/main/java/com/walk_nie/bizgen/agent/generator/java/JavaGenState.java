@@ -43,6 +43,8 @@ public final class JavaGenState {
     private String termsText = "";
     private List<ApiCatalog.ApiEntry> apis = new ArrayList<ApiCatalog.ApiEntry>();
     private String apisText = "";
+    private String specText = "";
+    private com.walk_nie.bizgen.agent.spec.SpecCatalog specCatalog;
     private JavaDraft draft;
     private List<String> violations = new ArrayList<String>();
     private boolean selfCorrected;
@@ -149,6 +151,23 @@ public final class JavaGenState {
 
     public void setApisText(String apisText) {
         this.apisText = apisText == null ? "" : apisText;
+    }
+
+    /** 展開済みの spec 資料（api/dict/template/example）を 1 つの prompt Text として返す。 */
+    public String specText() {
+        return specText;
+    }
+
+    public void setSpecText(String specText) {
+        this.specText = specText == null ? "" : specText;
+    }
+
+    public com.walk_nie.bizgen.agent.spec.SpecCatalog specCatalog() {
+        return specCatalog;
+    }
+
+    public void setSpecCatalog(com.walk_nie.bizgen.agent.spec.SpecCatalog specCatalog) {
+        this.specCatalog = specCatalog;
     }
 
     public JavaDraft draft() {

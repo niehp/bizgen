@@ -38,6 +38,8 @@ public final class AgentConfig {
     private final Path templateFillOutputRoot;
     private final String templateFillPrompt;
     private final int templateFillMaxFiles;
+    private final Path specRoot;
+    private final int specMaxChars;
 
     private final int maxTables;
     private final int maxSimilarFiles;
@@ -51,6 +53,7 @@ public final class AgentConfig {
     private final int agentMaxSameCall;
     private final int apiTopN;
     private final boolean selfCorrect;
+    private final int maxBlocks;
 
     private AgentConfig(Properties properties) {
         this.baseUrl = value(properties, "llm.baseUrl", "http://127.0.0.1:11434/v1");
@@ -89,6 +92,8 @@ public final class AgentConfig {
                 value(properties, "path.templateFillOutputRoot", "out/template-fill"));
         this.templateFillPrompt = value(properties, "templateFill.prompt", "template-fill");
         this.templateFillMaxFiles = Integer.parseInt(value(properties, "templateFill.maxFiles", "50"));
+        this.specRoot = java.nio.file.Paths.get(value(properties, "path.specRoot", "spec"));
+        this.specMaxChars = Integer.parseInt(value(properties, "spec.maxChars", "24000"));
 
         this.maxTables = Integer.parseInt(value(properties, "gen.maxTables", "5"));
         this.maxSimilarFiles = Integer.parseInt(value(properties, "gen.maxSimilarFiles", "5"));
@@ -102,6 +107,7 @@ public final class AgentConfig {
         this.agentMaxSameCall = Integer.parseInt(value(properties, "agent.maxSameCall", "3"));
         this.apiTopN = Integer.parseInt(value(properties, "gen.apiTopN", "8"));
         this.selfCorrect = Boolean.parseBoolean(value(properties, "gen.selfCorrect", "true"));
+        this.maxBlocks = Integer.parseInt(value(properties, "gen.maxBlocks", "12"));
     }
 
     private static String value(Properties properties, String key, String defaultValue) {
@@ -224,12 +230,26 @@ public final class AgentConfig {
         return templateFillMaxFiles;
     }
 
+    /** 参考資料ルート（spec/api, spec/dict, spec/template, spec/example を格納）。 */
+    public Path specRoot() {
+        return specRoot;
+    }
+
+    /** prompt に注入する spec 資料の合計文字数上限。 */
+    public int specMaxChars() {
+        return specMaxChars;
+    }
+
     public int apiTopN() {
         return apiTopN;
     }
 
     public boolean selfCorrect() {
         return selfCorrect;
+    }
+
+    public int maxBlocks() {
+        return maxBlocks;
     }
 
     public int maxTables() {
@@ -290,12 +310,15 @@ public final class AgentConfig {
                 + "tplFillIn : " + (templateFillRoot == null ? "(未設定)" : templateFillRoot.toAbsolutePath().normalize()) + "\n"
                 + "tplFillOut: " + templateFillOutputRoot.toAbsolutePath().normalize()
                 + " (prompt=" + templateFillPrompt + ", maxFiles=" + templateFillMaxFiles + ")\n"
+                + "specRoot  : " + specRoot.toAbsolutePath().normalize()
+                + " (maxChars=" + specMaxChars + ")\n"
                 + "maxTables : " + maxTables + "\n"
                 + "similarCode: maxFiles=" + maxSimilarFiles + ", maxChars=" + maxSimilarCodeChars
                 + ", scanLimit=" + searchMaxFiles + "\n"
                 + "agentLimits: rounds=" + agentMaxRounds + ", toolCalls=" + agentMaxToolCalls
                 + ", sameCall=" + agentMaxSameCall + "\n"
-                + "featureGen: apiTopN=" + apiTopN + ", selfCorrect=" + selfCorrect + "\n"
+                + "featureGen: apiTopN=" + apiTopN + ", selfCorrect=" + selfCorrect
+                + ", maxBlocks=" + maxBlocks + "\n"
                 + "reviewRequired: " + reviewRequired;
     }
 }

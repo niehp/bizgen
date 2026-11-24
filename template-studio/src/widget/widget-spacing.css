@@ -1,0 +1,156 @@
+/* widget-spacing 融合样式：所有选择器限定在 .ws-root 下，沿用 template-studio 的变量体系。 */
+.ws-root {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 20px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+}
+.ws-root * { box-sizing: border-box; }
+.ws-root h1, .ws-root h2, .ws-root p { margin: 0; }
+
+.ws-root .ws-hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.ws-root .ws-hero h1 { font-size: 18px; font-weight: 500; letter-spacing: .01em; }
+.ws-root .ws-hero p { margin-top: 3px; font-size: 12px; color: var(--muted); }
+.ws-root .ws-formula {
+  font-size: 11px;
+  color: var(--blue);
+  background: var(--blue-soft);
+  border: 1px solid #b5d4f4;
+  border-radius: 20px;
+  padding: 5px 12px;
+  font-family: var(--mono);
+  white-space: nowrap;
+}
+
+.ws-root .ws-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .03);
+}
+.ws-root .ws-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+}
+.ws-root .ws-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.ws-root .ws-field input {
+  width: 92px;
+  font: inherit;
+  font-family: var(--mono);
+  padding: 6px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  outline: none;
+}
+.ws-root .ws-field input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
+
+.ws-root button {
+  font: inherit;
+  font-size: 12px;
+  padding: 7px 13px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.ws-root button:hover { background: var(--surface-soft); border-color: var(--hint); }
+.ws-root button.ws-btn-primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+.ws-root button.ws-btn-primary:hover { background: #0c447c; border-color: #0c447c; }
+.ws-root .ws-summary {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--muted);
+}
+.ws-root .ws-summary b { color: var(--text); font-weight: 600; font-family: var(--mono); }
+
+.ws-root .ws-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+}
+.ws-root .ws-editor {
+  display: flex;
+  flex-direction: column;
+  min-height: 300px;
+  overflow: hidden;
+}
+.ws-root .ws-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.ws-root .ws-card-head h2 { font-size: 13px; font-weight: 600; }
+.ws-root .ws-card-head span { font-size: 11px; color: var(--hint); }
+.ws-root textarea {
+  flex: 1;
+  min-height: 260px;
+  border: 0;
+  outline: 0;
+  resize: vertical;
+  padding: 12px 14px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text);
+  background: transparent;
+  tab-size: 2;
+}
+.ws-root textarea[readonly] { background: var(--surface-soft); }
+.ws-root textarea::placeholder { color: var(--hint); }
+
+.ws-root .ws-table-card { overflow: hidden; }
+.ws-root .ws-table-wrap { max-height: 270px; overflow: auto; }
+.ws-root table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.ws-root th, .ws-root td {
+  padding: 7px 13px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.ws-root th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 11px;
+}
+.ws-root tbody tr:hover { background: var(--surface-soft); }
+.ws-root td.ws-new-left { color: var(--blue); font-weight: 600; font-family: var(--mono); }
+.ws-root td.ws-delta { color: var(--amber); font-family: var(--mono); }
+.ws-root td.ws-delta.ws-zero { color: var(--hint); }
+.ws-root td.ws-empty { text-align: center; color: var(--hint); padding: 24px 14px; white-space: normal; }
+
+@media (max-width: 900px) {
+  .ws-root .ws-columns { grid-template-columns: minmax(0, 1fr); }
+  .ws-root .ws-summary { margin-left: 0; flex-basis: 100%; }
+}

@@ -145,8 +145,12 @@ public final class Cli {
             terms();
         } else if ("api-list".equals(command)) {
             apiList();
+        } else if ("spec-list".equals(command)) {
+            specList();
         } else if ("feature-gen".equals(command)) {
             featureGen(options);
+        } else if ("flow-gen".equals(command)) {
+            flowGen(options);
         } else if ("agent-gen".equals(command)) {
             agentGen(options);
         } else if ("agent-sql".equals(command)) {
@@ -167,7 +171,7 @@ public final class Cli {
         out.println("  template java-class|table-schema [--out <file>]");
         out.println("  template-fill [--feature <md名>] [--var key=value] [--var.key=value]...");
         out.println("               入力ディレクトリ配下の全テンプレートを填充し、相対パスを維持して出力");
-        out.println("  pipeline java|sql|feature");
+        out.println("  pipeline java|sql|feature|flow");
         out.println("  preview java --feature <md名>");
         out.println("  preview sql --type select|update|delete --desc <内容> --tables <日本語表名,...> [--shape <SQL雛形>]");
         out.println("  preview agent [--feature <md名>]                 エージェントのツールと system prompt を表示");
@@ -179,7 +183,10 @@ public final class Cli {
         out.println("  tools                                     登録済み function tool 一覧（LLM 不使用）");
         out.println("  terms                                     术语库（日本語 -> 英語）一覧（LLM 不使用）");
         out.println("  api-list                                  API 库の登録済みメソッド一覧（LLM 不使用）");
+        out.println("  spec-list                                 spec/api・dict・template・example の資料一覧（LLM 不使用）");
         out.println("  feature-gen --feature <md名>              5 ステップ Pipeline で Java を生成・落盤");
+        out.println("  flow-gen --feature <md名>                 6 ステップ: 機能ブロック分解 → API は tool 定位 /");
+        out.println("                                            それ以外は新規生成 → ループ → 結合・潤色 → 落盤");
         out.println("  agent-gen --feature <md名>                 マルチターン Agent + tool 呼び出しで Java 生成");
         out.println("  agent-sql --type select|update|delete --desc <内容> --tables <日本語表名,...>");
         out.println("  agent-trace                               直近の Agent ターントレースを表示");
@@ -282,6 +289,8 @@ public final class Cli {
             out.println(new SqlGenPipeline().pipeline().stageIds().toString());
         } else if ("feature".equalsIgnoreCase(target)) {
             out.println(new FeatureCodegenPipeline().pipeline().stageIds().toString());
+        } else if ("flow".equalsIgnoreCase(target)) {
+            out.println(com.walk_nie.bizgen.agent.generator.flow.FlowCodegenPipeline.stageIds().toString());
         } else {
             out.println(new JavaGenPipeline().pipeline().stageIds().toString());
         }
@@ -378,6 +387,7 @@ public final class Cli {
         new LoadFeatureStage().execute(state, context);
         new LoadDesignStage().execute(state, context);
         new ResolveVariablesStage().execute(state, context);
+        new com.walk_nie.bizgen.agent.pipeline.stage.LoadSpecStage().execute(state, context);
         new ExtractTermsStage().execute(state, context);
         new MatchApiCatalogStage().execute(state, context);
         ResolvedFeature resolved = state.resolved();
@@ -398,6 +408,7 @@ public final class Cli {
         variables.put("similarCode", state.similarCode().promptText());
         variables.put("termsText", state.termsText());
         variables.put("apisText", state.apisText());
+        variables.put("specText", state.specText());
         out.println(PromptRenderer.render(repository, "java-generate", variables));
     }
 
@@ -528,6 +539,16 @@ public final class Cli {
         }
     }
 
+    /** spec/api・dict・template・example の参考資料一覧（LLM 不使用）。 */
+    private void specList() throws IOException {
+        com.walk_nie.bizgen.agent.spec.SpecCatalog catalog =
+                com.walk_nie.bizgen.agent.spec.SpecCatalog.load(
+                        config.specRoot(), context.variables(), config.specMaxChars());
+        out.println("spec 資料: " + config.specRoot().toAbsolutePath().normalize()
+                + " (maxChars=" + config.specMaxChars() + ")");
+        out.print(catalog.listText());
+    }
+
     /** 5 ステップ Pipeline を実行し、术语・API・自己修正・出力先を表示する。 */
     private void featureGen(Map<String, String> options) {
         String featureName = options.get("feature");
@@ -549,6 +570,39 @@ public final class Cli {
         }
     }
 
+    private void flowGen(Map<String, String> options) {
+        String featureName = options.get("feature");
+        if (StrUtil.isBlank(featureName)) {
+            throw new IllegalArgumentException("--feature が必要です");
+        }
+        com.walk_nie.bizgen.agent.generator.flow.FlowCodegenPipeline.Result result =
+                new com.walk_nie.bizgen.agent.generator.flow.FlowCodegenPipeline()
+                        .run(featureName, context);
+        com.walk_nie.bizgen.agent.generator.java.JavaWriteResult written = result.java().writeResult();
+        out.println("Flow Pipeline 完了: " + written.classFile());
+        if (written.packageInfoFile() != null) {
+            out.println("パッケージコメント: " + written.packageInfoFile());
+        }
+        out.println("コードの流れ: " + result.flow().plan().flow());
+        out.println("機能ブロック : " + result.flow().plan().blocks().size() + " 件 / 処理 "
+                + result.flow().blockRounds() + " 回");
+        for (com.walk_nie.bizgen.agent.generator.flow.CodePlan.Block block
+                : result.flow().plan().blocks()) {
+            out.println("  [" + block.index() + "] " + block.kind() + " " + block.description()
+                    + (block.apiSignature().isEmpty() ? "" : " → " + block.apiSignature()));
+        }
+        if (!result.flow().toolResolvedApis().isEmpty()) {
+            out.println("ツールで確認した API: " + result.flow().toolResolvedApis());
+        }
+        if (!written.warnings().isEmpty()) {
+            out.println("[WARN] 検証警告: " + written.warnings());
+        }
+        if (config.reviewRequired()) {
+            out.println("[REVIEW] 生成コードは人間がレビューしてから取り込んでください。");
+        }
+        printTraces(context);
+    }
+
     private void agentGen(Map<String, String> options) throws IOException {
         String featureName = options.get("feature");
         if (StrUtil.isBlank(featureName)) {
@@ -562,6 +616,9 @@ public final class Cli {
             out.println("パッケージコメント: " + result.packageInfoFile());
         }
         out.println("変更種別: " + result.intent() + "（" + state.intent().source() + "）");
+        if (!runner().selectedApis().isEmpty()) {
+            out.println("モデルが find_api で確認した API: " + runner().selectedApis());
+        }
         if (!result.warnings().isEmpty()) {
             out.println("[WARN] 検証警告: " + result.warnings());
         }

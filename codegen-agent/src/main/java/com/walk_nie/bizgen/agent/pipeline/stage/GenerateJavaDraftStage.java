@@ -58,6 +58,7 @@ public final class GenerateJavaDraftStage implements Stage<JavaGenState, JavaGen
             variables.put("similarCode", state.similarCode().promptText());
             variables.put("termsText", state.termsText());
             variables.put("apisText", state.apisText());
+            variables.put("specText", state.specText());
             String prompt = variables.resolveText(context.repository().prompt("java-generate"));
 
             LlmRequest request = new LlmRequest(config.model(),

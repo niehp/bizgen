@@ -66,6 +66,8 @@ gen.searchMaxFiles=2000               # 最多扫描多少个 Java 文件
 gen.maxSimilarFiles=5                 # 最多把几个类似文件喂给模型
 gen.maxSimilarCodeChars=12000         # 类似代码总字符上限（保护 14B 上下文）
 gen.maxTables=5                       # 一次最多喂给模型的表结构数
+path.specRoot=spec                    # 参考资料根（api/dict/template/example 四类 md）
+spec.maxChars=24000                   # spec 资料注入 prompt 的总字符上限，超限直接报错
 gen.reviewRequired=true
 agent.maxRounds=8                     # Agent 最多几轮 LLM 调用
 agent.maxToolCalls=30                 # Agent 单次生成最多调用多少次 tool
@@ -80,13 +82,17 @@ help                                  命令列表
 config                                查看配置（API Key 已脱敏）
 list java|project|usecase|class|method|schema|prompt|template
 template java-class|table-schema [--out <file>]      输出 md 模板
-pipeline java|sql                     查看流水线阶段（区分 CODE / LLM）
+pipeline java|sql|feature|flow        查看流水线阶段（区分 CODE / LLM）
 preview java --feature <md名>         只展开 prompt，不调用模型（含真实检索到的类似代码）
 preview sql --type select --desc "..." --tables "受注,顧客" [--shape "..."]
 preview agent                         查看 Agent 工具定义与 system prompt 模板
 search --feature <md名>               只执行既有代码检索，不调用模型
 tools                                 查看已注册的 function tools 与上限
-java-gen --feature <md名>             12 阶段 Java 生成框架（含术语/API/自检，不经过 Agent 循环）
+terms                                 查看术语库
+api-list                              查看 API 库
+spec-list                             查看 spec/api・dict・template・example 四类参考资料
+java-gen --feature <md名>             13 阶段 Java 生成框架（含术语/API/spec/自检，不经过 Agent 循环）
+flow-gen --feature <md名>             6 步流程：功能块分解 → API 走 tool / 其余新作 → 循环 → 结合润色
 sql-gen --type select|update|delete --desc "..." --tables "受注,顧客"
          [--shape <SQL雛形>] [--prompt <名>] [--var k=v] [--out <file>]
 agent-gen --feature <md名>            多轮 Agent + function tool 生成 Java
@@ -181,6 +187,7 @@ SQL 变量格式（按类型固定）：
 | `load_design_doc` | 读取指定级别的设计 md（正文有字符上限） | Java / SQL |
 | `search_similar_code` | 用指定关键词确定性检索既有 Java 类似代码 | Java |
 | `read_java_file` | 读取配置根目录内的既有 Java（拒绝路径穿越） | Java |
+| `find_api` | 由模型主动检索 API 库；只返回 md 中真实存在的签名，并记录选中结果供人工审核 | Java |
 | `list_tables` | 列出可用表结构 md | SQL |
 | `load_table_schema` | 读取指定表的结构，超过 `gen.maxTables` 报错而非截断 | SQL |
 
@@ -195,6 +202,8 @@ agent-trace
 ```
 
 `preview agent` 可查看工具定义与 system prompt 模板，`tools` 只看工具列表——两者都不调用模型。Agent 模式下**写盘仍然只由代码侧的最终阶段执行**，且仍受 `gen.reviewRequired` 约束。
+
+Java 生成时，模型可先用 `find_api` 决定调用哪些既存 API：工具只从 `md/api` 返回真实签名（可按 `className` 收窄），模型再把 API 调用与新写的代码组合成一个类。代码侧会把术语表和预检索到的 API 一并放进 system prompt；工具实际返回过的 API 会在 `agent-gen` 输出里以「モデルが find_api で確認した API」列出，便于人工审核。
 
 prompt 模板：`md/prompt/agent-java.md`、`md/prompt/agent-sql.md`。
 
@@ -217,6 +226,50 @@ Qwen2.5-Coder 不在 LM Studio 的 **native tool use** 支持列表中，常把�
 
 4. 若原始响应中既没有结构化调用也没有上述文本，说明模型没有打算调用工具：可尝试把 `llm.toolChoice` 设为 `required`、换用 LM Studio 标记为原生支持工具调用的模型（如 Qwen2.5-7B-Instruct、Llama-3.1-8B-Instruct），或提高量化等级（Q4_K_M → Q5_K_M）。
 
+## 6 ステップ Flow Pipeline（flow-gen）
+
+`flow-gen --feature <md名>` は、需求に定義された 6 ステップをそのまま実行する。
+
+| ステップ | 担当 | 内容 |
+| --- | --- | --- |
+| 1 | コード | 機能 md を読み込む |
+| 2 | コード | `{{変数}}` を展開（設計 md も展開） |
+| 3 | モデル | 意味を解析し、コードの流れと機能ブロックに分解（`code-plan.md`） |
+| 4 | モデル + tool | API ブロックは `find_api` function tool で実在シグネチャを定位、それ以外は新規コード生成（`code-block-api.md` / `code-block-new.md`） |
+| 5 | コード | 機能ブロックを最後まで 1 つずつループ（上限 `gen.maxBlocks=12`、進行は `FlowGenState` が管理） |
+| 6 | モデル | 全ブロックを 1 クラスに結合し、日本語コメントを潤色（`combine-polish.md`） |
+| 7 | コード | 参考資料（下記）を読み込み、変数展開して全 prompt に注入（`03b-load-spec`） |
+
+その後、既存の `java-gen` と同じ「静的検証 → 1 回だけ自己修正 → パス構造に沿って UTF-8 落盤」を通る。
+`agent-gen` がモデルに探索を任せるのに対し、flow-gen は**ループ回数とブロック順をコード側が固定**し、モデルには各ブロックの中身だけを任せる。
+
+出力にはコードの流れ・各ブロックの種別と確認済み API・ツールで確認した API 一覧が表示され、人工レビューに使える。ローカル LLM サービス自体は起動している必要がある。
+
+```
+flow-gen --feature sample-order-query-service
+pipeline flow        # 14 ステージの順番を表示
+```
+
+### ステップ 7: 参考資料（spec）の prompt 注入
+
+モデルが要件を理解しやすくするため、`path.specRoot`（既定 `spec`）配下の 4 類の md を**すべて読み込み、変数展開して** prompt の「参考資料」段落へ注入する。
+
+| ディレクトリ | 内容 | モデルの使い方 |
+| --- | --- | --- |
+| `spec/api/*.md` | 利用可能な API メソッドシグネチャ | 呼び出し先の候補（白名单はあくまで `apiRoot`） |
+| `spec/dict/*.md` | 术语（日本語 -> 英語） | 識別子の命名 |
+| `spec/template/*.md` | コード／出力テンプレート | クラス骨格・Javadoc 粒度の参考 |
+| `spec/example/*.md` | 機能インスタンス（完成済み機能の例） | 書き方の参考。機能を持ち込まない |
+
+- 読み込みはコード側で決定論的に行う（パス昇順、`.md` のみ、`{{変数}}` は機能 md の変数で展開）。モデルに「どの資料を読むか」を選ばせない。
+- 注入先: `java-generate.md` / `code-plan.md` / `code-block-api.md` / `code-block-new.md` / `combine-polish.md` の `{{specText}}`。
+- `spec.maxChars`（既定 24000）を超えると黙って切り捨てずエラーとし、14B のコンテキスト保護と情報の黙った消失を防ぐ。
+- `java-gen` と `flow-gen` の両方で有効。`LoadSpecStage` は位相を進めず、LLM も呼ばない。
+
+```
+spec-list   # 4 類の資料一覧（LLM 不使用）
+```
+
 ## 5 ステップ Feature Pipeline（feature-gen）
 
 `feature-gen --feature <md名>` は、機能描写 MD を入力に次の 5 ステージを固定順で実行する。
@@ -230,7 +283,7 @@ Qwen2.5-Coder 不在 LM Studio 的 **native tool use** 支持列表中，常把�
 | 4 | `04-validate-correct` | LLM | 纯 Java コードを抽出し、非法文字・术语違反を検査。違反なら Self-Correction を 1 回だけ依頼 |
 | 5 | `05-write-file` | CODE | パッケージ構造に従って UTF-8 で `output/src/main/java/...` に落盤 |
 
-> 同じ 5 ステップの能力は `java-gen`（12 ステージ本流）にも統合済みです。术语/API/自己修正の判定は `CodegenSupport` を共用しているため、どちらを呼んでも同じルールが適用されます。`feature-gen` は「機能 MD だけから 1 クラスを生成して `featureOutputRoot` に落盤する」簡易モードとして残しています。
+> 同じ 5 ステップの能力は `java-gen`（13 ステージ本流、参考資料ロードを含む）にも統合済みです。术语/API/自己修正の判定は `CodegenSupport` を共用しているため、どちらを呼んでも同じルールが適用されます。`feature-gen` は「機能 MD だけから 1 クラスを生成して `featureOutputRoot` に落盤する」簡易モードとして残しています。
 
 ### 术语库と API 库
 

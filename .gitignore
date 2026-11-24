@@ -3,3 +3,4 @@
 *.log
 /codegen-agent.bak-20261121-1241
 /codegen-agent/lib
+/widget-spacing/node_modules
