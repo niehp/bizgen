@@ -157,6 +157,28 @@ public final class Cli {
             agentSql(options);
         } else if ("agent-trace".equals(command)) {
             agentTrace();
+        } else if ("java-index".equals(command)) {
+            javaIndex(options);
+        } else if ("java-files".equals(command)) {
+            javaFiles(options);
+        } else if ("java-search".equals(command)) {
+            javaSearch(options);
+        } else if ("java-class".equals(command)) {
+            javaClass(options);
+        } else if ("java-method".equals(command)) {
+            javaMethod(options);
+        } else if ("java-refs".equals(command)) {
+            javaRefs(options);
+        } else if ("java-similar".equals(command)) {
+            javaSimilar(options);
+        } else if ("java-rules".equals(command)) {
+            javaRules();
+        } else if ("propose-edit".equals(command)) {
+            proposeEdit(options);
+        } else if ("diff".equals(command)) {
+            showDiff(options);
+        } else if ("approve-edit".equals(command)) {
+            approveEdit(options);
         } else {
             out.println("不明なコマンド: " + command + "（'help' を参照）");
         }
@@ -190,6 +212,22 @@ public final class Cli {
         out.println("  agent-gen --feature <md名>                 マルチターン Agent + tool 呼び出しで Java 生成");
         out.println("  agent-sql --type select|update|delete --desc <内容> --tables <日本語表名,...>");
         out.println("  agent-trace                               直近の Agent ターントレースを表示");
+        out.println("");
+        out.println("--- Java コード知能（JDT AST + SQLite） ---");
+        out.println("  java-index build|refresh|stats            Java 索引の構築・差分更新・統計");
+        out.println("  java-files [--prefix <文字列>]            索引済み Java ファイル一覧");
+        out.println("  java-search --query <キーワード>          横断キーワード検索");
+        out.println("  java-class --class <クラス名>             クラス構造（import/フィールド/メソッド）");
+        out.println("  java-method --query <文字列>              メソッド検索");
+        out.println("  java-refs --symbol <名前> [--calls]       参照／呼び出し関係");
+        out.println("  java-similar --method <名前|ID>           類似メソッド検索");
+        out.println("  java-rules                                五级設計 md の規約を表示");
+        out.println("  propose-edit --path <Java相対パス> --summary <内容> --rationale <理由>");
+        out.println("               [--newContent <本文> | --methodName <名> --newMethod <本文>]");
+        out.println("               編集提案を作成（書き込まない）。提案IDと承認トークンを表示");
+        out.println("  diff --proposal <ID>                      提案の before/after 差分");
+        out.println("  approve-edit --proposal <ID> --token <トークン> [--reject]");
+        out.println("               人間が承認して書き込む。モデル単独では承認できない");
         out.println("  exit");
         out.println("");
         out.println("※ LLM 接続情報は config/agent-config.properties に記載します（--live 引数はありません）。");
@@ -731,6 +769,156 @@ public final class Cli {
     }
 
     /** --key value と位置引数を 0,1,... として保持する。--var.k=v も許可。 */
+    // ---------- Java コード知能（JDT AST + SQLite） ----------
+
+    private com.walk_nie.bizgen.agent.codeintel.CodeIntelService codeIntel() {
+        return com.walk_nie.bizgen.agent.codeintel.CodeIntelService.forConfig(config);
+    }
+
+    private static String require(Map<String, String> options, String key, String usage) {
+        String value = options.get(key);
+        if (value == null || value.trim().isEmpty()) {
+            throw new IllegalArgumentException("引数 --" + key + " が必要です。使い方: " + usage);
+        }
+        return value.trim();
+    }
+
+    private static int intOption(Map<String, String> options, String key, int defaultValue) {
+        String value = options.get(key);
+        if (value == null || value.trim().isEmpty()) {
+            return defaultValue;
+        }
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("--" + key + " は整数で指定してください: " + value);
+        }
+    }
+
+    private void javaIndex(Map<String, String> options) throws IOException {
+        String action = options.get("0") == null ? "refresh" : options.get("0").toLowerCase();
+        try {
+            if ("build".equals(action)) {
+                out.println("索引を再構築しました: " + codeIntel().indexer().rebuild().describe());
+            } else if ("refresh".equals(action)) {
+                out.println("索引を更新しました: " + codeIntel().indexer().refresh().describe());
+            } else if ("stats".equals(action)) {
+                out.println(codeIntel().stats());
+            } else {
+                out.println("使い方: java-index build|refresh|stats");
+            }
+        } catch (java.sql.SQLException e) {
+            out.println("[ERROR] SQLite 索引の操作に失敗: " + e.getMessage());
+        }
+    }
+
+    private void javaFiles(Map<String, String> options) {
+        try {
+            out.print(codeIntel().search().listFiles(options.get("prefix") == null
+                    ? "" : options.get("prefix"),
+                    intOption(options, "limit", config.javaIndexMaxResults())));
+        } catch (Exception e) {
+            out.println("[ERROR] " + e.getMessage());
+        }
+    }
+
+    private void javaSearch(Map<String, String> options) {
+        try {
+            out.print(codeIntel().search().keyword(
+                    require(options, "query", "java-search --query <キーワード>"),
+                    intOption(options, "limit", 20)));
+        } catch (Exception e) {
+            out.println("[ERROR] " + e.getMessage());
+        }
+    }
+
+    private void javaClass(Map<String, String> options) {
+        try {
+            out.println(codeIntel().search().classStructure(
+                    require(options, "class", "java-class --class <クラス名>")));
+        } catch (Exception e) {
+            out.println("[ERROR] " + e.getMessage());
+        }
+    }
+
+    private void javaMethod(Map<String, String> options) {
+        try {
+            out.print(codeIntel().search().findMethod(
+                    require(options, "query", "java-method --query <文字列>"),
+                    intOption(options, "limit", 20)));
+        } catch (Exception e) {
+            out.println("[ERROR] " + e.getMessage());
+        }
+    }
+
+    private void javaRefs(Map<String, String> options) {
+        try {
+            String symbol = require(options, "symbol", "java-refs --symbol <名前> [--calls]");
+            int limit = intOption(options, "limit", 20);
+            out.print(options.containsKey("calls")
+                    ? codeIntel().search().calls(symbol, limit)
+                    : codeIntel().search().references(symbol, limit));
+        } catch (Exception e) {
+            out.println("[ERROR] " + e.getMessage());
+        }
+    }
+
+    private void javaSimilar(Map<String, String> options) {
+        try {
+            out.print(codeIntel().search().similarMethods(
+                    require(options, "method", "java-similar --method <名前|ID>"),
+                    intOption(options, "limit", config.javaIndexSimilarTopN())));
+        } catch (Exception e) {
+            out.println("[ERROR] " + e.getMessage());
+        }
+    }
+
+    private void javaRules() {
+        try {
+            out.print(codeIntel().search().projectRules());
+        } catch (Exception e) {
+            out.println("[ERROR] " + e.getMessage());
+        }
+    }
+
+    private void proposeEdit(Map<String, String> options) {
+        String usage = "propose-edit --path <Java> --summary <内容> --rationale <理由> "
+                + "[--newContent <本文> | --methodName <名> --newMethod <本文>]";
+        try {
+            com.walk_nie.bizgen.agent.codeintel.JavaEditService.ProposeOutcome outcome =
+                    codeIntel().edit().propose(
+                            require(options, "path", usage),
+                            require(options, "summary", usage),
+                            require(options, "rationale", usage),
+                            options.get("newContent"),
+                            options.get("methodName"),
+                            options.get("newMethod"));
+            out.println(outcome.forHuman);
+        } catch (Exception e) {
+            out.println("[ERROR] " + e.getMessage());
+        }
+    }
+
+    private void showDiff(Map<String, String> options) {
+        try {
+            out.println(codeIntel().edit().diff(
+                    require(options, "proposal", "diff --proposal <ID>")));
+        } catch (Exception e) {
+            out.println("[ERROR] " + e.getMessage());
+        }
+    }
+
+    private void approveEdit(Map<String, String> options) {
+        try {
+            String usage = "approve-edit --proposal <ID> --token <トークン> [--reject]";
+            String id = require(options, "proposal", usage);
+            String token = options.containsKey("reject") ? "" : require(options, "token", usage);
+            out.println(codeIntel().edit().approve(id, token, !options.containsKey("reject")));
+        } catch (Exception e) {
+            out.println("[ERROR] " + e.getMessage());
+        }
+    }
+
     static Map<String, String> parseOptions(List<String> args) {
         Map<String, String> options = new LinkedHashMap<String, String>();
         int positional = 0;

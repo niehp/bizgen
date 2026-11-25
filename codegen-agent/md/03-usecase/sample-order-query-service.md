@@ -22,7 +22,7 @@ designs:
 
 ## クラス情報
 
-- クラス名: `{{entityName|大驼峰}}QueryService`
+- クラス名: `{{applicationId}}{{entityName|大驼峰}}QueryService`
 - クラスコメント: 受注の検索ユースケースを調整する。検索条件の検証と結果の整形を担当する。
 
 ## フィールド定義

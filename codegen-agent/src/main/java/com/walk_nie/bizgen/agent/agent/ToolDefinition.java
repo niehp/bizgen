@@ -102,6 +102,13 @@ public final class ToolDefinition {
         return property;
     }
 
+    public static Map<String, Object> integerProperty(String description) {
+        Map<String, Object> property = new LinkedHashMap<String, Object>();
+        property.put("type", "integer");
+        property.put("description", description);
+        return property;
+    }
+
     public static Map<String, Object> booleanProperty(String description) {
         Map<String, Object> property = new LinkedHashMap<String, Object>();
         property.put("type", "boolean");

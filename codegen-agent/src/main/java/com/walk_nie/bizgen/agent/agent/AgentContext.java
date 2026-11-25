@@ -21,6 +21,8 @@ public final class AgentContext {
     private final LlmClient llm;
     private final Set<String> selectedApiKeys = new LinkedHashSet<String>();
     private final List<ApiCatalog.ApiEntry> selectedApis = new ArrayList<ApiCatalog.ApiEntry>();
+    /** 編集提案のうち、人間だけに見せる承認トークンを含む表示文。モデルへは渡さない。 */
+    private String lastProposalForHuman = "";
 
     public AgentContext(AgentConfig config, MdRepository repository,
                         VariableTable variables, LlmClient llm) {
@@ -60,5 +62,14 @@ public final class AgentContext {
 
     public List<ApiCatalog.ApiEntry> selectedApis() {
         return Collections.unmodifiableList(selectedApis);
+    }
+
+    /** 編集提案を人間向け表示として記録する（LLM への tool 結果には含めない）。 */
+    public void recordProposalForHuman(String text) {
+        this.lastProposalForHuman = text == null ? "" : text;
+    }
+
+    public String lastProposalForHuman() {
+        return lastProposalForHuman;
     }
 }

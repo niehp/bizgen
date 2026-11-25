@@ -56,6 +56,17 @@ public final class AgentConfig {
     private final int maxBlocks;
     private final int maxAutoDesigns;
 
+    private final Path javaIndexRoot;
+    private final Path javaIndexDb;
+    private final int javaIndexMaxFiles;
+    private final int javaIndexMaxFileChars;
+    private final String javaIndexSkipDirs;
+    private final int javaIndexMaxResultChars;
+    private final int javaIndexMaxResults;
+    private final int javaIndexSimilarTopN;
+    private final boolean editRequireApprovalToken;
+    private final String editBackupSuffix;
+
     private AgentConfig(Properties properties) {
         this.baseUrl = value(properties, "llm.baseUrl", "http://127.0.0.1:11434/v1");
         this.chatPath = value(properties, "llm.chatPath", "/chat/completions");
@@ -111,6 +122,27 @@ public final class AgentConfig {
         this.maxBlocks = Integer.parseInt(value(properties, "gen.maxBlocks", "12"));
         this.maxAutoDesigns = Math.max(0,
                 Integer.parseInt(value(properties, "gen.maxAutoDesigns", "6")));
+
+        String indexRoot = value(properties, "path.javaIndexRoot", "").trim();
+        this.javaIndexRoot = indexRoot.isEmpty() ? null : java.nio.file.Paths.get(indexRoot);
+        this.javaIndexDb = java.nio.file.Paths.get(
+                value(properties, "path.javaIndexDb", "out/java-index.db"));
+        this.javaIndexMaxFiles = Math.max(1,
+                Integer.parseInt(value(properties, "javaIndex.maxFiles", "5000")));
+        this.javaIndexMaxFileChars = Math.max(1,
+                Integer.parseInt(value(properties, "javaIndex.maxFileChars", "200000")));
+        this.javaIndexSkipDirs = value(properties, "javaIndex.skipDirs",
+                "target,build,out,.git,node_modules,.workbuddy");
+        this.javaIndexMaxResultChars = Math.max(1,
+                Integer.parseInt(value(properties, "javaIndex.maxResultChars", "16000")));
+        this.javaIndexMaxResults = Math.max(1,
+                Integer.parseInt(value(properties, "javaIndex.maxResults", "20")));
+        this.javaIndexSimilarTopN = Math.max(1,
+                Integer.parseInt(value(properties, "javaIndex.similarTopN", "10")));
+        this.editRequireApprovalToken = Boolean.parseBoolean(
+                value(properties, "edit.requireApprovalToken", "true"));
+        this.editBackupSuffix = properties.getProperty("edit.backupSuffix", ".bak") == null
+                ? ".bak" : properties.getProperty("edit.backupSuffix", ".bak").trim();
     }
 
     private static String value(Properties properties, String key, String defaultValue) {
@@ -296,6 +328,48 @@ public final class AgentConfig {
         return agentMaxSameCall;
     }
 
+    // --- Java コード知能（JDT + SQLite） ---
+
+    public Path javaIndexRoot() {
+        return javaIndexRoot;
+    }
+
+    public Path javaIndexDb() {
+        return javaIndexDb;
+    }
+
+    public int javaIndexMaxFiles() {
+        return javaIndexMaxFiles;
+    }
+
+    public int javaIndexMaxFileChars() {
+        return javaIndexMaxFileChars;
+    }
+
+    public String javaIndexSkipDirs() {
+        return javaIndexSkipDirs;
+    }
+
+    public int javaIndexMaxResultChars() {
+        return javaIndexMaxResultChars;
+    }
+
+    public int javaIndexMaxResults() {
+        return javaIndexMaxResults;
+    }
+
+    public int javaIndexSimilarTopN() {
+        return javaIndexSimilarTopN;
+    }
+
+    public boolean editRequireApprovalToken() {
+        return editRequireApprovalToken;
+    }
+
+    public String editBackupSuffix() {
+        return editBackupSuffix;
+    }
+
     /** API キーをマスクして表示用文字列を返す。 */
     public String describe() {
         String masked = apiKey.isEmpty() ? "(未設定)" : "****" + apiKey.substring(Math.max(0, apiKey.length() - 4));
@@ -327,6 +401,12 @@ public final class AgentConfig {
                 + ", sameCall=" + agentMaxSameCall + "\n"
                 + "featureGen: apiTopN=" + apiTopN + ", selfCorrect=" + selfCorrect
                 + ", maxBlocks=" + maxBlocks + ", maxAutoDesigns=" + maxAutoDesigns + "\n"
+                + "javaIndex: root=" + (javaIndexRoot == null ? "(未設定)"
+                        : javaIndexRoot.toAbsolutePath().normalize())
+                + ", db=" + javaIndexDb.toAbsolutePath().normalize()
+                + ", maxFiles=" + javaIndexMaxFiles + ", maxFileChars=" + javaIndexMaxFileChars + "\n"
+                + "editApproval: tokenRequired=" + editRequireApprovalToken
+                + ", backupSuffix=" + (editBackupSuffix.isEmpty() ? "(なし)" : editBackupSuffix) + "\n"
                 + "reviewRequired: " + reviewRequired;
     }
 }

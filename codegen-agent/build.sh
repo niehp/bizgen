@@ -1,15 +1,20 @@
 #!/usr/bin/env bash
-# Maven が無い環境でもビルドできる、JDK のみのビルドスクリプト（Git Bash 用）。
+# JDT / SQLite 依存を持つため、ビルドは Maven に統一する。
+# 初回取得後は `mvn -o` でオフラインビルドも可能。
 set -euo pipefail
-ROOT="$(cygpath -m "$(cd "$(dirname "$0")" && pwd)")"
-SRC="$ROOT/src/main/java"
-OUT="$ROOT/target/classes"
-JAR="$ROOT/target/bizgen-agent.jar"
+ROOT="$(cd "$(dirname "$0")" && pwd)"
 
-rm -rf "$OUT"
-mkdir -p "$OUT" "$ROOT/target"
-find "$SRC" -name '*.java' -print > "$ROOT/target/sources.txt"
-javac -encoding UTF-8 -source 1.8 -target 1.8 -d "$OUT" @"$ROOT/target/sources.txt"
-jar cfe "$JAR" com.walk_nie.bizgen.agent.AgentApplication -C "$OUT" .
+if command -v mvn >/dev/null 2>&1; then
+  (cd "$ROOT" && mvn -q -DskipTests package)
+else
+  echo "[BUILD FAILED] Maven が見つかりません。JDT / SQLite の依存解決に Maven が必要です。" >&2
+  exit 1
+fi
+
+JAR="$ROOT/target/bizgen-agent.jar"
+if [ ! -f "$JAR" ]; then
+  echo "[BUILD FAILED] $JAR が生成されませんでした。" >&2
+  exit 1
+fi
 echo "[BUILD OK] $JAR"
 echo "[RUN] java -jar \"$JAR\""

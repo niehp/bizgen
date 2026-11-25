@@ -1,11 +1,22 @@
 package com.walk_nie.bizgen.agent.agent;
 
+import com.walk_nie.bizgen.agent.agent.tool.ApproveJavaEditTool;
 import com.walk_nie.bizgen.agent.agent.tool.FindApiTool;
+import com.walk_nie.bizgen.agent.agent.tool.FindClassTool;
+import com.walk_nie.bizgen.agent.agent.tool.FindMethodTool;
+import com.walk_nie.bizgen.agent.agent.tool.FindReferencesTool;
+import com.walk_nie.bizgen.agent.agent.tool.FindSimilarMethodTool;
+import com.walk_nie.bizgen.agent.agent.tool.GetClassStructureTool;
+import com.walk_nie.bizgen.agent.agent.tool.GetDiffTool;
+import com.walk_nie.bizgen.agent.agent.tool.GetProjectRulesTool;
 import com.walk_nie.bizgen.agent.agent.tool.ListDesignDocsTool;
+import com.walk_nie.bizgen.agent.agent.tool.ListJavaFilesTool;
 import com.walk_nie.bizgen.agent.agent.tool.LoadDesignDocTool;
 import com.walk_nie.bizgen.agent.agent.tool.LoadTableSchemaTool;
 import com.walk_nie.bizgen.agent.agent.tool.ListTablesTool;
 import com.walk_nie.bizgen.agent.agent.tool.ReadJavaFileTool;
+import com.walk_nie.bizgen.agent.agent.tool.ProposeJavaEditTool;
+import com.walk_nie.bizgen.agent.agent.tool.SearchJavaCodeTool;
 import com.walk_nie.bizgen.agent.agent.tool.SearchSimilarCodeTool;
 import com.walk_nie.bizgen.agent.generator.CodegenSupport;
 import com.walk_nie.bizgen.agent.generator.java.JavaDraft;
@@ -57,7 +68,19 @@ public final class AgentRunner {
                 .register(new LoadDesignDocTool())
                 .register(new SearchSimilarCodeTool())
                 .register(new ReadJavaFileTool())
-                .register(new FindApiTool());
+                .register(new FindApiTool())
+                // Java コード知能（JDT AST + SQLite）: 12 ツール
+                .register(new ListJavaFilesTool())
+                .register(new SearchJavaCodeTool())
+                .register(new FindClassTool())
+                .register(new FindMethodTool())
+                .register(new FindReferencesTool())
+                .register(new GetClassStructureTool())
+                .register(new FindSimilarMethodTool())
+                .register(new GetProjectRulesTool())
+                .register(new ProposeJavaEditTool())
+                .register(new GetDiffTool())
+                .register(new ApproveJavaEditTool());
         this.sqlTools = new ToolRegistry()
                 .register(new ListTablesTool())
                 .register(new LoadTableSchemaTool())

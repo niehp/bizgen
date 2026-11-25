@@ -134,6 +134,7 @@ JAVA生成
     1.从md文件中读取需求描述
     2.替换变量
     3.喂给大模型，对需求进行语义分析，得出代码流程，功能块
+      MD 文档解析 → 业务步骤识别 → 函数识别 
     4.如果是api，使用function tool，定位哪个api。如果不是，寻找类似实例，根据实例，生成代码，如没有实例，log输入
     5.循环处理step 4 直至结束。
     6.生成后的代码，再有大模型 润色，结合。
@@ -179,3 +180,74 @@ SQL生成
   prompt,md文件的表名，字段名，用的是日语，喂给大模型之前，完成转化 表名->表结构->字段日语名->字段英语名
   变量 自动匹配 首字母大写，首字母小写 大驼峰 小驼峰 大蛇形 小蛇形
   sql支持变量. 变量格式 字段是字符型：/*变量的小驼峰*/‘xx'; 日期型：/*变量的小驼峰*/CURREN_DATE; 数字型：/*变量的小驼峰`*/9 
+
+
+MD 文档解析 → 业务步骤识别 → 函数识别 → Java 候选代码检索 → 调用关系扩展 → 参考代码排序 → 人工确认 → 交给模型生成代码。
+
+第二阶段：Java 项目扫描
+- 选择项目目录
+- 扫描 Java 文件
+- JDT 解析
+- 建立 SQLite 索引
+第三阶段：MD 需求解析
+- 解析 MD 标题
+- 解析混合表格和文字
+- 提取函数名
+- 识别隐含业务动作
+- 保留原始行号
+第四阶段：参考代码检索
+- 精确函数检索
+- 业务语义检索
+- 调用关系分析
+- 相似业务流程检索
+- 候选代码评分
+第五阶段：Agent Engine
+- Agent Loop
+- Tool Calling
+- 上下文管理
+- Reference Package
+第六阶段：代码生成和审批
+- Java 代码生成
+- Diff
+- 人工审批
+- 文件权限控制
+- 备份和回滚
+
+输入一份 MD 业务需求文件，Agent 能自动找到对应的 Java 参考代码。
+
+对某个文件夹下的java文件，
+ JDT AST 解析 
+ 提取类、方法、字段、Import 
+ 保存 SQLite 索引 
+实现 Java 智能检索
+  关键字搜索
+  类和方法搜索
+  相似方法检索
+  方法调用关系
+实现 function tool
+工具名	功能
+list_java_files	列出 Java 文件
+read_java_file	读取 Java 文件
+search_java_code	搜索代码关键字
+find_class	查找类和接口
+find_method	查找方法
+find_references	查找类或方法引用
+get_class_structure	获取类结构
+find_similar_method	查找相似方法
+get_project_rules	获取项目编码规范
+propose_java_edit	提出 Java 修改方案
+get_diff	查看修改差异
+approve_java_edit	审批并写入 Java 文件
+
+
+配合自作ai agent，生成代码，推荐大模型
+ 电脑配置 内存32G，显存16GB 
+ windows系统 日文操作系统 
+ 日语java开发环境，功能需求，代码注释 都要求日语
+ java语言
+ 自作ai agent 由纯java原生开发
+ OpenAI兼容API
+ 支持ToolCalling
+ 支持MCP
+ 基于现有工程，做新规开发。
+ 

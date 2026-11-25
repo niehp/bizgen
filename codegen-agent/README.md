@@ -44,12 +44,12 @@ out/                               # 生成结果（Java 保存到 out/java）
 ## 构建与运行
 
 ```bash
-bash build.sh          # Git Bash；生成 target/bizgen-agent.jar
+bash build.sh          # Git Bash；内部调用 mvn package，生成 target/bizgen-agent.jar
 # 或 Windows: build.bat
 java -Dfile.encoding=UTF-8 -jar target/bizgen-agent.jar
 ```
 
-也可使用 Maven（`pom.xml`，无外部依赖）。建议Windows控制台先执行 `chcp 65001` 以正确显示日语。
+**注意**：加入 JDT AST 与 SQLite 后必须经 Maven 解析依赖（`mvn package`），构建脚本已改为调用 Maven。首次拉取后可用 `mvn -o package` 离线构建，依赖会复制到 `target/lib/`，jar 的 manifest 已带 Class-Path。建议 Windows 控制台先执行 `chcp 65001` 以正确显示日语。
 
 ## 配置（config/agent-config.properties）
 
@@ -329,6 +329,58 @@ template-fill --feature sample-order-query-service --var.company=自社名
 
 設定項目: `path.templateFillRoot` / `path.templateFillOutputRoot` / `templateFill.prompt` / `templateFill.maxFiles`。
 prompt を差し替えれば、Java / XML / JS / Markdown などテンプレートの種類ごとに填充ルールを変えられます（ファイルごとに prompt を選ぶ仕組みではありません）。
+
+## Java 代码智能检索（JDT AST + SQLite）
+
+对 `path.javaIndexRoot` 指定的文件夹递归扫描 `.java`，用 JDT AST 提取类/接口/enum、方法签名与本文、字段、import、方法调用与名字引用，写入本地 SQLite（`path.javaIndexDb`）。**解析和索引全部是确定性代码，不调用大模型，数据不出本机。** 用 SHA-256 判断文件是否变化，`java-index refresh` 只重解析变更文件，`build` 为全量重建。
+
+### function tool（12 个）
+
+| 工具 | 用途 |
+| --- | --- |
+| `list_java_files` | 列出索引中的 Java 文件 |
+| `read_java_file` | 读取 Java 文件（索引优先，拒绝根目录外路径） |
+| `search_java_code` | 横断关键字搜索（类名/方法名/Javadoc/源码） |
+| `find_class` | 查找类、接口、enum |
+| `find_method` | 查找方法与签名 |
+| `find_references` | 查找名字引用；`includeCalls=true` 时返回调用关系 |
+| `get_class_structure` | 类的 import / 字段 / 方法结构 |
+| `find_similar_method` | 基于确定性 token Jaccard 的相似方法检索 |
+| `get_project_rules` | 读取五级设计 md 作为编码规范 |
+| `propose_java_edit` | 生成编辑提案（**不写盘**） |
+| `get_diff` | 查看提案的 before/after 行级 LCS 差异 |
+| `approve_java_edit` | 人工审批后写盘（带备份、原子替换、索引更新） |
+
+这 12 个工具已注册进 `agent-gen` 的 Java 工具白名单，可用 `tools` 查看。所有结果都有字符上限、固定排序（分数降序 → 路径 → 行号），保护 14B 上下文。
+
+### 编辑审批的状态机
+
+`PROPOSED → DIFFED → APPROVED → WRITTEN`（或任意阶段 `REJECTED`），非法跳转直接报错。
+
+- `propose_java_edit` 会生成提案 ID 和**审批令牌**。令牌只显示在 CLI 输出里，不进入模型的 tool 结果。
+- `approve_java_edit` 必须同时提供提案 ID、CLI 显示的令牌、`approve=true`；令牌错误/缺失即拒绝写盘，模型无法自行批准。
+- 写盘前自动备份 `.bak`，用临时文件 + 原子替换，成功后刷新索引。重复审批会被状态机拦下。
+- 方式二选一：`--newContent <完整Java>` 或 `--methodName <名> + --newMethod <方法>`；方法级替换使用括号感知的确定性源码编辑器。
+
+### CLI 示例
+
+```
+java-index build                           # 首次构建索引
+java-index stats                           # 文件/类/方法/字段/import/调用/引用计数
+java-files --prefix Order
+java-search --query customerId
+java-class --class OrderRepository
+java-method --query find
+java-refs --symbol findNameById --calls
+java-similar --method findByOrderId
+java-rules
+propose-edit --path com/.../CustomerService.java --summary "..." --rationale "..." \
+             --methodName findCustomerName --newMethod "..."
+diff --proposal <提案ID>
+approve-edit --proposal <提案ID> --token <CLIが表示したトークン>
+```
+
+配置：`path.javaIndexRoot` / `path.javaIndexDb` / `javaIndex.maxFiles` / `javaIndex.maxFileChars` / `javaIndex.skipDirs` / `javaIndex.maxResultChars` / `javaIndex.maxResults` / `javaIndex.similarTopN` / `edit.requireApprovalToken` / `edit.backupSuffix`。
 
 ## 注意
 
