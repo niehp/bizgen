@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { widgetsToCsv } from '../../../shared/excel-widgets.js';
 import { WIDGET_SCHEMA } from '../../../shared/maskat.js';
 import { CONTROL_CLASSES } from '../../../shared/layout.js';
@@ -23,9 +23,11 @@ const download = (content, filename, type) => {
   setTimeout(() => URL.revokeObjectURL(url), 1500);
 };
 
-export default function WidgetList({ items, onEdit, onDelete, tags = [], onNotice }) {
+export default function WidgetList({ items, onEdit, onDelete, onAdd, tags = [], onNotice }) {
   const [filter, setFilter] = useState('all');
   const [copied, setCopied] = useState('');
+  const [openAttrs, setOpenAttrs] = useState(null);
+  const [attrQuery, setAttrQuery] = useState('');
 
   const shown = useMemo(() => {
     const list = filter === 'all' ? items : items.filter((i) => i.control === filter);
@@ -40,6 +42,7 @@ export default function WidgetList({ items, onEdit, onDelete, tags = [], onNotic
     top: it.top, left: it.left, width: it.width, height: it.height,
     events: it.events || [],
     eventAttributes: it.eventAttributes || [],
+    attrs: it.attrs || {},
     required: Boolean(it.required),
   })), null, 2)}\n`, [items]);
 
@@ -57,6 +60,14 @@ export default function WidgetList({ items, onEdit, onDelete, tags = [], onNotic
     onEdit(it.id, 'events', [...cur, name]);
     onNotice?.(`${it.name} 已追加 event 属性「${name}」（取自 /maskat-spec）`);
   };
+
+  // 坐标 / 名字已在表格里单独编辑，属性面板只展示其余 spec 属性
+  const ATTR_SKIP = new Set(['top', 'left', 'width', 'height', 'name']);
+  const specAttrs = (tag) => {
+    const spec = WIDGET_SCHEMA[tag] || {};
+    return (spec.attributes || []).filter((a) => !ATTR_SKIP.has(a));
+  };
+  const setAttr = (it, key, value) => onEdit(it.id, 'attrs', { ...(it.attrs || {}), [key]: value });
 
   return (
     <section className="panel widget-panel">
@@ -85,6 +96,7 @@ export default function WidgetList({ items, onEdit, onDelete, tags = [], onNotic
           ))}
         </div>
         <div className="toolbar-actions">
+          <button type="button" className="btn btn-primary" onClick={onAdd} disabled={!onAdd}>＋ 添加 widget</button>
           <button type="button" className="btn btn-ghost" onClick={copy}>{copied || '复制 JSON'}</button>
           <button type="button" className="btn btn-ghost" onClick={() => download(json, 'widgets.json', 'application/json;charset=utf-8')}>下载 JSON</button>
           <button type="button" className="btn btn-ghost" onClick={() => download(widgetsToCsv(items), 'widgets.csv', 'text/csv;charset=utf-8')}>下载 CSV</button>
@@ -104,17 +116,23 @@ export default function WidgetList({ items, onEdit, onDelete, tags = [], onNotic
               <th className="col-num">WIDTH</th>
               <th className="col-num">HEIGHT</th>
               <th>event 属性 / 可用属性（spec）</th>
+              <th className="col-attrs">spec 属性</th>
               <th className="col-act" />
             </tr>
           </thead>
           <tbody>
             {shown.length === 0 && (
-              <tr><td colSpan={10} className="table-empty">还没有 widget：请上传 Excel 设计书或点「加载示例设计书」</td></tr>
+              <tr><td colSpan={11} className="table-empty">还没有 widget：请上传 Excel 设计书、点「加载示例设计书」或点「＋ 添加 widget」</td></tr>
             )}
             {shown.map(({ it, idx }) => {
               const specEvents = WIDGET_SCHEMA[it.tag]?.eventAttributes || it.eventAttributes || [];
+              const attrsOpen = openAttrs === it.id;
+              const q = attrQuery.trim().toLowerCase();
+              const attrList = specAttrs(it.tag).filter((a) => !q || a.toLowerCase().includes(q));
+              const required = WIDGET_SCHEMA[it.tag]?.required || [];
               return (
-                <tr key={it.id} className={it.control === 'input' ? 'row-input' : it.control === 'choice' ? 'row-choice' : ''}>
+                <Fragment key={it.id}>
+                <tr className={it.control === 'input' ? 'row-input' : it.control === 'choice' ? 'row-choice' : ''}>
                   <td className="col-no">{idx}</td>
                   <td>
                     <input className="cell-text" value={it.name} onChange={(e) => onEdit(it.id, 'name', e.target.value)} aria-label="widget 名字" />
@@ -169,10 +187,46 @@ export default function WidgetList({ items, onEdit, onDelete, tags = [], onNotic
                       {specEvents.length === 0 && <span className="cell-sub">该 widget 无 event 属性</span>}
                     </div>
                   </td>
+                  <td className="col-attrs">
+                    <button type="button" className="btn btn-mini" onClick={() => setOpenAttrs(attrsOpen ? null : it.id)}>
+                      {attrsOpen ? '收起' : '属性'}
+                    </button>
+                  </td>
                   <td className="col-act">
                     <button type="button" className="btn-icon" onClick={() => onDelete(it.id)} title="删除" aria-label="删除">×</button>
                   </td>
                 </tr>
+                {attrsOpen && (
+                  <tr className="attrs-row">
+                    <td colSpan={11}>
+                      <div className="attrs-head">
+                        <strong>{it.tag}</strong> 按 /maskat-spec 编辑属性（带 * 为必填）
+                        <input
+                          className="cell-input attrs-search"
+                          value={attrQuery}
+                          placeholder="筛选属性名"
+                          aria-label="筛选 spec 属性"
+                          onChange={(e) => setAttrQuery(e.target.value)}
+                        />
+                      </div>
+                      <div className="attrs-grid">
+                        {attrList.map((a) => (
+                          <label key={a} className="attrs-field">
+                            <span>{a}{required.includes(a) ? ' *' : ''}</span>
+                            <input
+                              className="cell-input"
+                              value={(it.attrs || {})[a] ?? ''}
+                              placeholder={WIDGET_SCHEMA[it.tag]?.defaults?.[a] ?? ''}
+                              onChange={(e) => setAttr(it, a, e.target.value)}
+                            />
+                          </label>
+                        ))}
+                        {!attrList.length && <span className="cell-sub">该 widget 没有匹配的属性</span>}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               );
             })}
           </tbody>
@@ -180,6 +234,7 @@ export default function WidgetList({ items, onEdit, onDelete, tags = [], onNotic
       </div>
       <p className="widget-hint">
         TOP / LEFT / WIDTH 单位为原图像素；event 属性列可直接输入，也可点击下方 spec 提供的合法属性。
+        点每行「属性」可按 /maskat-spec 编辑该 widget 的其它属性；「＋ 添加 widget」可任意新增。
         灰色分类 <strong>{CLASS_LABEL.input}</strong> / <strong>{CLASS_LABEL.choice}</strong> 可随时调整。
       </p>
     </section>

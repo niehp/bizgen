@@ -93,6 +93,36 @@ export default function ExcelStudio({ config, onStatus }) {
     prev ? { ...prev, items: prev.items.filter((it) => it.id !== id) } : prev
   ));
 
+  /** 任意添加 widget：不依赖上传的 Excel，默认取 spec 中第一个可用标签 */
+  const addWidget = () => {
+    const tag = tags[0]?.tag || DEFAULT_WIDGET_RULES[0]?.tag || 'textBox';
+    const rule = DEFAULT_WIDGET_RULES.find((r) => r.tag === tag) || DEFAULT_WIDGET_RULES[0];
+    const base = result || {
+      filename: '手動追加',
+      sheets: { names: [] },
+      headers: { item: { row: 0 }, layout: { row: 0 } },
+      stats: { itemRows: 0, layoutRows: 0, matched: 0, input: 0, choice: 0, other: 0 },
+      warnings: [],
+      items: [],
+    };
+    const idx = (base.items || []).length + 1;
+    const item = {
+      id: `manual-${Date.now()}-${idx}`,
+      name: `新規ウィジェット ${idx}`,
+      tag,
+      widget: rule?.widget || 'text',
+      control: rule?.control || 'input',
+      top: 20 + ((idx - 1) % 10) * 36,
+      left: 20 + Math.floor((idx - 1) / 10) * 150,
+      width: 140, height: 28,
+      events: [],
+      eventAttributes: WIDGET_SCHEMA[tag]?.eventAttributes || [],
+      attrs: {}, required: false, options: [], source: 'manual',
+    };
+    setResult({ ...base, items: [...base.items, item] });
+    tell(`已添加 widget：${item.name}（${tag}）`);
+  };
+
   const items = result?.items || [];
   const image = {
     name: result?.filename || '',
@@ -151,6 +181,7 @@ export default function ExcelStudio({ config, onStatus }) {
             >导出 widget 列表 CSV</button>
           )}
           {result && <button type="button" className="btn btn-ghost" onClick={() => downloadState(result, 'pageitem-excel-state.json')}>导出状态 JSON</button>}
+          {result && <span className="badge badge-ok">自动保存 JSON</span>}
           {result && <span className="file-tag">{result.filename}</span>}
         </div>
 
@@ -192,7 +223,7 @@ export default function ExcelStudio({ config, onStatus }) {
         </p>
       </section>
 
-      <WidgetList items={items} onEdit={edit} onDelete={remove} tags={tags} onNotice={setNotice} />
+      <WidgetList items={items} onEdit={edit} onDelete={remove} onAdd={addWidget} tags={tags} onNotice={setNotice} />
 
       <MaskatPanel image={image} items={items} config={config} />
     </main>

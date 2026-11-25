@@ -1,7 +1,7 @@
 /**
  * 视觉大模型解析：页面截图 → 项目名 + bbox + 控件分类 → 归一化坐标 → 原图像素 TOP/LEFT/WIDTH。
  * 只调用 OpenAI 兼容的 /chat/completions 多模态接口，不依赖任何 SDK。
- * 密钥可以来自服务端 .env，或来自页面单次请求（不落盘、不写日志、不回传）。
+ * 密钥来自服务端 .env。请求体里的 llm 字段仅兼容旧客户端，页面已移除大模型设置。
  */
 import { envValue } from './env.js';
 import { normalizeItems } from '../shared/layout.js';
@@ -25,7 +25,7 @@ export function llmStatus() {
     provider: 'OpenAI 兼容 /chat/completions（多模态视觉）',
     hint: key
       ? '服务端 .env 已配置密钥，可直接点击「解析图片」'
-      : '服务端未配置密钥：可在页面「大模型设置」临时填写，或使用离线示例 / 手动标注',
+      : '服务端未配置密钥：请在 .env 中设置 LLM_API_KEY，或使用离线示例 / 手动标注',
   };
 }
 

@@ -16,7 +16,7 @@ import * as javaIndex from './java-store.js';
 // page-item-studio 整合：图片解析 / Excel 设计书 → Maskat widget。
 // 这些模块无第三方依赖（纯 Node），复用同一个 Express 实例与 3001 端口即可。
 import { parseImageDataUrl, IMAGE_LIMITS } from './imagedata.js';
-import { parseImage, llmStatus } from './vision.js';
+import { parseImage } from './vision.js';
 import { UNITS, CONTROL_CLASSES, WIDGET_TYPES } from '../shared/layout.js';
 import {
   DEFAULT_WIDGET_RULES, MASKAT_NOTE, SPEC_META, WIDGET_SCHEMA,
@@ -321,7 +321,6 @@ app.get('/api/java/entries/:id', wrap((req) => javaIndex.getEntry(
 
 // 页面需要处理的用户选项、spec 元信息与可用标签一次性下发，避免前端重复实现规则。
 app.get('/api/config', wrap(() => ({
-  llm: llmStatus(),
   units: UNITS,
   limits: IMAGE_LIMITS,
   excelLimits: EXCEL_LIMITS,

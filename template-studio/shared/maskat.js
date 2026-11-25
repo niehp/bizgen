@@ -182,6 +182,8 @@ function requiredValues(w, spec) {
   const out = {};
   for (const a of spec.required) {
     if (['name', 'top', 'left', 'width', 'height'].includes(a)) continue;
+    // 用户在 widget 属性面板里显式填过的值优先，不被自动补全覆盖
+    if (Object.prototype.hasOwnProperty.call(w.attrs || {}, a) && String(w.attrs[a]) !== '') continue;
     if (a === 'text') out[a] = w.label || w.name;
     else if (a === 'field') out[a] = w.id;
     else if (a === 'group') out[a] = w.label ? `${w.label}Group` : 'defaultGroup';
@@ -241,7 +243,8 @@ export function buildWidgets(items = [], rawRules = [], options = {}) {
       widget,
       tag,
       className: WIDGET_SCHEMA[tag]?.className || rule?.className || '',
-      attrs: { ...(rule?.attrs || {}) },
+      // 规则默认值 + 每个 widget 自己按 spec 编辑的属性（后者优先）
+      attrs: { ...(rule?.attrs || {}), ...(it.attrs && typeof it.attrs === 'object' ? it.attrs : {}) },
       eventAttributes: spec.eventAttributes,
       events,
       specRequired: spec.required,

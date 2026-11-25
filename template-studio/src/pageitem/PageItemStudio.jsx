@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getConfig, parseImage } from './api.js';
 import { buildDemo } from './demo.js';
+import { isSvgFile, svgToPng } from './svgToPng.js';
 import { boxFromPoints, clamp, fromDisplay, sortItems, syncControlWidget, uid } from '../../shared/layout.js';
 import UploadPanel from './components/UploadPanel.jsx';
 import ImageCanvas from './components/ImageCanvas.jsx';
@@ -21,7 +22,6 @@ import WidgetExcelStudio from './components/ExcelStudio.jsx';
 import useAutoSave, { downloadState } from './useAutoSave.js';
 import './pageitem.css'; // 作用域样式：全部选择器限定在 .pi-root 下，不污染主界面
 
-const DEFAULT_LLM = { baseUrl: '', apiKey: '', model: '', focus: '', maxItems: 200, useEnv: true };
 const STORAGE_IMAGE = 'image:v1';
 
 export default function PageItemStudio({ onStatus }) {
@@ -35,7 +35,6 @@ export default function PageItemStudio({ onStatus }) {
   const [unit, setUnit] = useState('px');
   const [zoom, setZoom] = useState(1);
   const [mode, setMode] = useState('select');
-  const [llm, setLlm] = useState(DEFAULT_LLM);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -55,7 +54,7 @@ export default function PageItemStudio({ onStatus }) {
   useEffect(() => {
     getConfig()
       .then(setConfig)
-      .catch(() => setConfig({ llm: { configured: false, hint: '后端未连接：请确认 Node.js 服务已启动' } }));
+      .catch(() => setConfig({ hint: '后端未连接：请确认 Node.js 服务已启动' }));
   }, []);
 
   // 首次挂载恢复上次自动保存的图片工作状态。
@@ -64,9 +63,9 @@ export default function PageItemStudio({ onStatus }) {
     if (!saved) return;
     if (saved.image) setImage(saved.image);
     if (Array.isArray(saved.items)) setItems(saved.items);
-    if (saved.llm) setLlm((p) => ({ ...p, ...saved.llm }));
     if (saved.unit) setUnit(saved.unit);
     if (saved.source) setSource(saved.source);
+    // 旧版本快照里可能残留 llm 设置，按需求不再恢复、也不再展示
     setResetKey((k) => k + 1);
     setNotice('已恢复上次自动保存的工作状态');
     // 只在挂载时恢复一次
@@ -76,19 +75,32 @@ export default function PageItemStudio({ onStatus }) {
   // 图片视图状态变化 → 自动保存到 localStorage（同步写入，防抖交给依赖变化频率）。
   useEffect(() => {
     if (!image && !items.length) return;
-    imageAuto.save({ image, items, llm, unit, source });
+    imageAuto.save({ image, items, unit, source });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [image, items, llm, unit, source]);
+  }, [image, items, unit, source]);
 
   const onUpload = useCallback((file) => {
-    if (!file || !file.type.startsWith('image/')) { setError('请选择图片文件'); return; }
+    if (!file || (!file.type.startsWith('image/') && !isSvgFile(file))) { setError('请选择图片文件'); return; }
     if (file.size > 12 * 1024 * 1024) { setError('图片超过 12 MB，请压缩后重试'); return; }
+    setError('');
+    // SVG 先在浏览器里栅格化为 PNG，再走与位图完全相同的解析/框选/自动保存流程。
+    if (isSvgFile(file)) {
+      svgToPng(file)
+        .then((png) => {
+          setImage(png);
+          setItems([]); setSelectedId(null); setMeta(null); setDropped([]); setSource(''); setError('');
+          tell(`已载入 SVG 并转换为 PNG（${png.width} × ${png.height} px），点「解析图片」开始识别`);
+          setResetKey((k) => k + 1);
+        })
+        .catch((e) => setError(e?.message || 'SVG 转换失败'));
+      return;
+    }
     const reader = new FileReader();
     reader.onerror = () => setError('图片读取失败');
     reader.onload = () => {
       const dataUrl = String(reader.result || '');
       const probe = new Image();
-      probe.onerror = () => setError('无法解析该图片，请另存为 PNG / JPG 后重试');
+      probe.onerror = () => setError('无法解析该图片，请另存为 PNG / JPG / WEBP 后再上传');
       probe.onload = () => {
         setImage({
           name: file.name || 'pasted-image.png', width: probe.naturalWidth, height: probe.naturalHeight,
@@ -137,10 +149,10 @@ export default function PageItemStudio({ onStatus }) {
     if (!image) return;
     setLoading(true); setError(''); setNotice('');
     try {
+      // 大模型配置统一由服务端 .env 提供，页面不再收集/传递密钥等设置。
       const result = await parseImage({
         image: image.dataUrl, filename: image.name,
-        llm: { baseUrl: llm.baseUrl.trim(), apiKey: llm.apiKey, model: llm.model.trim(), useEnv: llm.useEnv },
-        options: { focus: llm.focus.trim(), maxItems: Number(llm.maxItems) || 200 },
+        options: { maxItems: 200 },
       });
       setImage((prev) => (prev ? { ...prev, width: result.image.width, height: result.image.height, mime: result.image.mime, bytes: result.image.bytes } : prev));
       setItems(result.items); setDropped(result.dropped || []); setMeta(result.meta);
@@ -154,14 +166,17 @@ export default function PageItemStudio({ onStatus }) {
     } finally {
       setLoading(false);
     }
-  }, [image, llm, tell]);
+  }, [image, tell]);
 
   const onEdit = useCallback((id, field, value) => {
-    if (!image) return;
+    // 坐标需要图片尺寸做边界校正；名字 / 分类 / spec 属性等即使未上传图片也可编辑
+    if (!image && ['top', 'left', 'width', 'height'].includes(field)) return;
     setItems((prev) => prev.map((it) => {
       if (it.id !== id) return it;
       if (field === 'control' || field === 'widget') return { ...it, ...syncControlWidget(it, field, value) };
-      if (['name', 'type', 'label', 'options', 'required'].includes(field)) return { ...it, [field]: value };
+      if (['name', 'type', 'label', 'options', 'required', 'attrs', 'events', 'tag', 'eventAttributes'].includes(field)) {
+        return { ...it, [field]: value };
+      }
       const n = fromDisplay(field, value, unit, image);
       if (n === null) return it;
       const W = image.width, H = image.height;
@@ -195,6 +210,28 @@ export default function PageItemStudio({ onStatus }) {
     tell(`已新增框选项目：TOP ${valid.top} / LEFT ${valid.left} / WIDTH ${valid.width}`);
   }, [image, items.length, tell]);
 
+  /** 不依赖框选，直接添加一个可编辑的 widget 项目（任意添加） */
+  const onAddItem = useCallback(() => {
+    const W = image?.width || 800;
+    const H = image?.height || 600;
+    const idx = items.length + 1;
+    const id = uid();
+    const next = {
+      id,
+      name: `新規项目 ${idx}`,
+      top: Math.max(0, Math.min(H - 28, 20 + ((idx - 1) % 10) * 36)),
+      left: Math.max(0, Math.min(W - 140, 20 + Math.floor((idx - 1) / 10) * 150)),
+      width: Math.min(140, W), height: 28,
+      type: 'input', text: '', confidence: 0, source: 'manual',
+      control: 'input', widget: 'text', label: '', options: [], required: false,
+      attrs: {}, events: [], eventAttributes: [],
+    };
+    setItems((prev) => sortItems([...prev, next]));
+    setSelectedId(id);
+    setSource((prev) => (prev === 'demo' || prev === 'vision' ? 'mixed' : prev || 'manual'));
+    tell(`已添加 widget：${next.name}（TOP ${next.top} / LEFT ${next.left} / WIDTH ${next.width}）`);
+  }, [image, items.length, tell]);
+
   const onClear = useCallback(() => {
     setItems([]); setSelectedId(null); setDropped([]);
     tell('项目列表已清空，图片仍保留，可重新解析或框选');
@@ -202,7 +239,7 @@ export default function PageItemStudio({ onStatus }) {
 
   // 自动保存工具栏：导出 / 导入。state 序列化后即是“当前状态的 JSON 快照”。
   const fileRef = useRef(null);
-  const exportState = () => downloadState({ image, items, llm, unit, source, view: 'image' }, 'pageitem-state.json');
+  const exportState = () => downloadState({ image, items, unit, source, view: 'image' }, 'pageitem-state.json');
   const importState = (file) => {
     if (!file) return;
     const reader = new FileReader();
@@ -211,7 +248,6 @@ export default function PageItemStudio({ onStatus }) {
         const data = JSON.parse(String(reader.result || ''));
         if (data.image) setImage(data.image);
         if (Array.isArray(data.items)) setItems(data.items);
-        if (data.llm) setLlm((p) => ({ ...p, ...data.llm }));
         if (data.unit) setUnit(data.unit);
         if (data.source) setSource(data.source);
         setResetKey((k) => k + 1);
@@ -236,7 +272,7 @@ export default function PageItemStudio({ onStatus }) {
             : '文件 / 剪贴板 → 视觉解析 → 输入框 / 选择项分类 → 坐标 → Maskat widget'}
         </span>
         <span className="pi-autosave">
-          <span className="badge badge-ok">自动保存</span>
+          <span className="badge badge-ok">自动保存 JSON</span>
           <button type="button" className="btn btn-mini" onClick={exportState}>导出状态 JSON</button>
           <button type="button" className="btn btn-mini" onClick={() => fileRef.current?.click()}>导入</button>
           <input ref={fileRef} type="file" accept="application/json,.json" hidden
@@ -252,7 +288,7 @@ export default function PageItemStudio({ onStatus }) {
         : (
           <div className="layout">
             <aside className="side">
-              <UploadPanel config={config} llm={llm} setLlm={setLlm} onUpload={onUpload}
+              <UploadPanel config={config} onUpload={onUpload}
                 onDemo={onDemo} onParse={onParse} loading={loading} hasImage={Boolean(image)}
                 image={image} error={error} notice={notice} />
             </aside>
@@ -263,7 +299,7 @@ export default function PageItemStudio({ onStatus }) {
               <ItemTable key={resetKey} items={items} unit={unit} setUnit={setUnit}
                 image={image || { width: 1, height: 1 }} selectedId={selectedId}
                 onSelect={setSelectedId} onEdit={onEdit} onDelete={onDelete} onClear={onClear}
-                dropped={dropped} />
+                onAdd={onAddItem} dropped={dropped} />
               <OutputPanel image={image || {}} items={items} unit={unit} meta={meta} source={source} />
               <MaskatPanel image={image || { width: 1, height: 1 }} items={items} config={config} />
             </main>

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { itemRows, ITEM_TYPES, CONTROL_CLASSES, WIDGET_TYPES } from '../../../shared/layout.js';
+import { attrsToText, parseAttrs, DEFAULT_WIDGET_RULES, WIDGET_SCHEMA } from '../../../shared/maskat.js';
 
 const NUM_FIELDS = ['top', 'left', 'width', 'height'];
 const HEAD = { top: 'TOP', left: 'LEFT', width: 'WIDTH', height: 'HEIGHT' };
@@ -9,9 +10,11 @@ const TYPE_OPTIONS = {
 };
 const FILTERS = [{ id: 'all', label: '全部' }, ...CONTROL_CLASSES.map((c) => ({ id: c.id, label: c.label }))];
 
+const TAG_BY_WIDGET = Object.fromEntries(DEFAULT_WIDGET_RULES.map((r) => [r.widget, r.tag]));
+
 export default function ItemTable({
   items, unit, setUnit, image, selectedId,
-  onSelect, onEdit, onDelete, onClear, dropped,
+  onSelect, onEdit, onDelete, onClear, onAdd, dropped,
 }) {
   const [drafts, setDrafts] = useState({});
   const [filter, setFilter] = useState('all');
@@ -46,6 +49,13 @@ export default function ItemTable({
     other: items.filter((i) => (i.control || 'other') === 'other').length,
   };
 
+  // 每个 widget 可按 /maskat-spec 编辑属性；坐标/名字已有独立列，这里只提示其余属性
+  const ATTR_SKIP = new Set(['top', 'left', 'width', 'height', 'name']);
+  const specAttrHint = (it) => {
+    const tag = it.tag || TAG_BY_WIDGET[it.widget];
+    return (WIDGET_SCHEMA[tag]?.attributes || []).filter((a) => !ATTR_SKIP.has(a)).slice(0, 12).join(', ');
+  };
+
   return (
     <section className="card table-card">
       <div className="card-head card-head-row">
@@ -60,6 +70,7 @@ export default function ItemTable({
             </select>
           </label>
           <span className="count-chip">{items.length} 个项目</span>
+          <button type="button" className="btn btn-mini btn-primary" onClick={onAdd} disabled={!onAdd}>＋ 添加项目</button>
           <button type="button" className="btn btn-mini btn-danger-ghost" onClick={onClear} disabled={!items.length}>清空</button>
         </div>
       </div>
@@ -102,6 +113,7 @@ export default function ItemTable({
                 ))}
                 <th className="col-control">控件分类</th>
                 <th className="col-widget">Widget</th>
+                <th className="col-attrs">spec 属性</th>
                 <th className="col-label">关联标签 / 候选项</th>
                 <th className="col-type">外观类型</th>
                 <th className="col-op" />
@@ -156,6 +168,16 @@ export default function ItemTable({
                         <option key={w.id} value={w.id}>{w.label}</option>
                       ))}
                     </select>
+                  </td>
+                  <td className="col-attrs">
+                    <input
+                      className="cell-input"
+                      value={attrsToText(it.attrs || {})}
+                      placeholder="field=xxx, maxlength=100"
+                      title={specAttrHint(it) || '该 widget 的 spec 属性'}
+                      onChange={(e) => onEdit(it.id, 'attrs', parseAttrs(e.target.value))}
+                      onFocus={() => onSelect(it.id)}
+                    />
                   </td>
                   <td className="col-label">
                     <input

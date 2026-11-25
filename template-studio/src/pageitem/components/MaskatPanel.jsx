@@ -158,7 +158,7 @@ export default function MaskatPanel({ image, items, config }) {
               <div>
                 <button type="button" className="btn btn-mini" onClick={exportRules}>导出规则</button>
                 <button type="button" className="btn btn-mini" onClick={() => fileRef.current?.click()}>导入规则</button>
-                <button type="button" className="btn btn-mini btn-danger-ghost" onClick={() => { touched.current = true; setRules(rulesForUi(DEFAULT_WIDGET_RULES)); setNotice('已恢复默认映射规则'); }}>恢复默认</button>
+                <button type="button" className="btn btn-mini btn-danger-ghost" onClick={() => { touched.current = true; setRules(rulesForUi(DEFAULT_WIDGET_RULES)); setNotice('已按 /maskat-spec 重建映射规则'); }}>按 spec 重建</button>
                 <input ref={fileRef} type="file" accept=".json,application/json" hidden onChange={importRules} />
               </div>
             </div>

@@ -9,7 +9,7 @@
  */
 import {
   dialectInfo, findTable, autoJoinPlan, makeTableId,
-  DEFAULT_PLACEHOLDER_STYLE, isNumericType, isDateType,
+  DEFAULT_PLACEHOLDER_STYLE, isNumericType, isDateType, isCharacterType,
 } from './dbmeta.js';
 
 /** 日付 / 日時型の条件値に置くサンプルリテラル */
@@ -99,10 +99,10 @@ function valueOf(raw, name, style, flags = {}) {
  * 別名付きは plan.aliases で表を逆引きし、無ければ対象表 → 同名列の順に探す。
  */
 /**
- * 列参照（t1.col / col）からメタデータ上の「列コメント」を引く。
+ * 列参照（alias.col / col）からメタデータ上の「列コメント」を引く。
  * columnTypeOf と同じ解決順で、UPDATE / DELETE の SQL に DB 列コメントを表示するために使う。
  */
-export function columnCommentOf(metadata, plan, cfg, ref) {
+function resolveColumn(metadata, plan, cfg, ref) {
   const path = String(ref ?? '');
   const dot = path.lastIndexOf('.');
   const alias = dot >= 0 ? path.slice(0, dot) : '';
@@ -116,59 +116,100 @@ export function columnCommentOf(metadata, plan, cfg, ref) {
   if (!table && plan?.tables?.length) {
     table = plan.tables.find((t) => t.columns.some((c) => c.name === colName));
   }
-  return table?.columns.find((c) => c.name === colName)?.comment || '';
+  return { table, column: table?.columns.find((c) => c.name === colName) || null };
+}
+
+export function columnCommentOf(metadata, plan, cfg, ref) {
+  return resolveColumn(metadata, plan, cfg, ref).column?.comment || '';
 }
 
 export function columnTypeOf(metadata, plan, cfg, ref) {
-  const path = String(ref ?? '');
-  const dot = path.lastIndexOf('.');
-  const alias = dot >= 0 ? path.slice(0, dot) : '';
-  const colName = dot >= 0 ? path.slice(dot + 1) : path;
-  let table = null;
-  if (alias && plan?.aliases) {
-    const tableId = Object.keys(plan.aliases).find((id) => plan.aliases[id] === alias);
-    if (tableId) table = findTable(metadata, tableId);
-  }
-  if (!table && cfg?.tableId) table = findTable(metadata, cfg.tableId);
-  if (!table && plan?.tables?.length) {
-    table = plan.tables.find((t) => t.columns.some((c) => c.name === colName));
-  }
-  return table?.columns.find((c) => c.name === colName)?.type || '';
+  return resolveColumn(metadata, plan, cfg, ref).column?.type || '';
 }
 
-function renderCondition(cond, ctx) {
+/**
+ * 列の並び順を決めるキー。表の順番 × 列の ordinal で返す。
+ * 「字段的顺序按照表的顺序」を満たすため、SELECT / WHERE / SET すべてで使う。
+ */
+export function makeOrdinalOf(metadata, plan, cfg) {
+  return (ref) => {
+    const { table, column } = resolveColumn(metadata, plan, cfg, ref);
+    const tableIndex = table && plan?.tables?.length
+      ? plan.tables.findIndex((t) => t.id === table.id)
+      : 0;
+    return (tableIndex < 0 ? 0 : tableIndex) * 100000 + (column?.ordinal || 0);
+  };
+}
+
+function renderConditionExpr(cond, ctx) {
   const { dialect, quote, style } = ctx;
   const left = columnRef(cond.column, dialect, quote);
   const op = cond.op || '=';
   const flags = literalFlags(ctx.typeOf?.(cond.column));
   const v = valueOf(cond.value, cond.column, style, flags);
-  let expr;
   switch (op) {
-    case 'IS NULL': expr = `${left} IS NULL`; break;
-    case 'IS NOT NULL': expr = `${left} IS NOT NULL`; break;
-    case 'IN': expr = `${left} IN (${v})`; break;
+    case 'IS NULL': return `${left} IS NULL`;
+    case 'IS NOT NULL': return `${left} IS NOT NULL`;
+    case 'IN': return `${left} IN (${v})`;
     case 'BETWEEN': {
       const v2 = valueOf(cond.value2, `${cond.column}_to`, style, flags);
-      expr = `${left} BETWEEN ${v} AND ${v2}`;
-      break;
+      return `${left} BETWEEN ${v} AND ${v2}`;
     }
-    default: expr = `${left} ${op} ${v}`;
+    default: return `${left} ${op} ${v}`;
   }
-  return expr;
+}
+
+/** IF 文の変数名。個別指定が無ければ列名の camelCase を使う */
+export function conditionVariable(cond) {
+  const raw = String(cond?.variable ?? '').trim();
+  return camelCase(raw || cond?.column || 'param');
+}
+
+// 条件 1 行（IF 付きは 3 行）を出力する。
+// IF の書式: スラッシュ2つ + アスタリスク + IF ... + アスタリスク + スラッシュ2つ で囲む。
+// AND / OR は IF ブロックの中に置き、IF が偽のとき条件自体が消えるようにする。
+function renderConditionLines(cond, ctx, isFirst) {
+  const lines = [];
+  const wrap = Boolean(cond.if);
+  if (wrap) {
+    const variable = conditionVariable(cond);
+    // 文字型は空文字も弾く。数値 / 日付 / boolean などは null チェックだけ。
+    const check = isCharacterType(ctx.typeOf?.(cond.column))
+      ? `${variable} != "" && ${variable} != null`
+      : `${variable} != null`;
+    lines.push(`/*IF ${check}*/`);
+  }
+  const prefix = isFirst ? '' : (cond.conjunction === 'OR' ? 'OR ' : 'AND ');
+  let text = `    ${prefix}${renderConditionExpr(cond, ctx)}`;
+  // UPDATE / DELETE では DB の列コメントを既定で表示する。
+  // 個別条件のコメント（c.comment）があればそれを優先し、無ければメタデータの列コメントを使う。
+  const note = c_note(cond, ctx);
+  if (note) text += ` -- ${note}`;
+  lines.push(text);
+  if (wrap) lines.push('/*END*/');
+  return lines;
+}
+
+function c_note(cond, ctx) {
+  return cond.comment || (ctx.showColumnComments ? ctx.commentOf?.(cond.column) : '') || '';
 }
 
 export function buildWhere(conditions, ctx) {
   const active = (conditions || []).filter((c) => c && c.column);
   if (!active.length) return [];
-  const lines = ['WHERE'];
-  active.forEach((c, i) => {
-    const prefix = i === 0 ? '' : (c.conjunction === 'OR' ? 'OR ' : 'AND ');
-    let text = `    ${prefix}${renderCondition(c, ctx)}`;
-    // UPDATE / DELETE では DB の列コメントを既定で表示する。
-    // 個別条件のコメント（c.comment）があればそれを優先し、無ければメタデータの列コメントを使う。
-    const note = c.comment || (ctx.showColumnComments ? ctx.commentOf?.(c.column) : '');
-    if (note) text += ` -- ${note}`;
-    lines.push(text);
+  // フィールド順はテーブル定義順に揃える（ユーザーが行を入れ替えても出力順は一定）
+  if (ctx.ordinalOf) {
+    active.sort((a, b) => ctx.ordinalOf(a.column) - ctx.ordinalOf(b.column));
+  }
+  // IF が複数ある場合、先頭の IF が偽でも残りの条件が正しく効くよう WHERE 1 = 1 を基準にする。
+  const useAnchor = active.length > 1 && active.some((c) => c.if);
+  const lines = [useAnchor ? 'WHERE 1 = 1' : 'WHERE'];
+  // 直前が IF ブロックだけなら、その条件が消える可能性があるため AND / OR を付けない。
+  let hasCertainCondition = false;
+  active.forEach((c) => {
+    const first = useAnchor ? false : !hasCertainCondition;
+    lines.push(...renderConditionLines(c, ctx, first));
+    if (!c.if) hasCertainCondition = true;
   });
   return lines;
 }
@@ -191,6 +232,7 @@ export function buildSelectJoin(metadata, cfg = {}) {
     addComments: Boolean(cfg.addComments),
     style: cfg.placeholderStyle || DEFAULT_PLACEHOLDER_STYLE,
     typeOf: (ref) => columnTypeOf(metadata, plan, cfg, ref),
+    ordinalOf: makeOrdinalOf(metadata, plan, cfg),
   };
   const warnings = [];
   if (!plan.tables.length) {
@@ -204,7 +246,9 @@ export function buildSelectJoin(metadata, cfg = {}) {
     // 列数無制限でも線形時間で済むよう列名を索引化する
     const byName = new Map(t.columns.map((c) => [c.name, c]));
     const picked = cfg.select?.[t.id] ?? t.columns.map((c) => c.name);
-    for (const name of picked) {
+    // 出力列はテーブル定義の列順に揃える（選択した順序には依存しない）
+    const ordered = [...picked].sort((a, b) => (byName.get(a)?.ordinal || 0) - (byName.get(b)?.ordinal || 0));
+    for (const name of ordered) {
       const col = byName.get(name);
       if (!col) continue;
       let expr = `    ${columnRef(`${alias}.${name}`, dialect, ctx.quote)}`;
@@ -239,12 +283,18 @@ export function buildSelectJoin(metadata, cfg = {}) {
     if (ctx.addComments && t.comment) line += ` -- ${t.comment}`;
     lines.push(line);
     const override = cfg.onOverrides?.[idx] || cfg.onOverrides?.[j.tableId] || cfg.onOverrides?.[j.alias];
-    const ons = (Array.isArray(override) ? override : j.on || []).filter((o) => o.left && o.right);
+    const ons = (Array.isArray(override) ? override : j.on || []).filter(
+      (o) => o.left && (o.rightMode === 'value' || o.right),
+    );
     if (ons.length) {
-      const expr = ons
-        .map((o) => `${columnRef(o.left, dialect, ctx.quote)} = ${columnRef(o.right, dialect, ctx.quote)}`)
-        .join(' AND ');
-      lines.push(`    ON ${expr}`);
+      // ON / AND はそれぞれ 1 行ずつ出力する。右辺は列参照のほか入力値も選べる。
+      ons.forEach((o, oi) => {
+        const left = columnRef(o.left, dialect, ctx.quote);
+        const right = o.rightMode === 'value' || !o.right
+          ? valueOf(o.rightValue ?? o.value ?? '', o.left, ctx.style, literalFlags(ctx.typeOf?.(o.left)))
+          : columnRef(o.right, dialect, ctx.quote);
+        lines.push(`    ${oi === 0 ? 'ON ' : 'AND '}${left} = ${right}`);
+      });
     } else {
       lines.push('    ON 1 = 1');
       warnings.push(`${t.id} の結合条件を自動推定できませんでした（ON 1 = 1）。結合条件を手動で指定してください。`);
@@ -290,6 +340,7 @@ function ctxOf(metadata, cfg) {
     style: cfg.placeholderStyle || DEFAULT_PLACEHOLDER_STYLE,
     typeOf: (ref) => columnTypeOf(metadata, null, cfg, ref),
     commentOf: (ref) => columnCommentOf(metadata, null, cfg, ref),
+    ordinalOf: makeOrdinalOf(metadata, null, cfg),
   };
 }
 
@@ -306,8 +357,11 @@ export function buildUpdate(metadata, cfg = {}) {
   // 指定がない場合は「表の全列」を既定とする。空配列は全解除の明示指定として尊重する。
   const requested = cfg.setColumns == null ? table.columns.map((c) => c.name) : cfg.setColumns;
   const names = Array.isArray(requested) ? requested : [];
-  // 列数無制限でも O(n^2) にならないよう、重複排除と存在確認は Set / Map で行う
-  const setNames = [...new Set(names)].filter((n) => byName.has(n));
+  // 列数無制限でも O(n^2) にならないよう、重複排除と存在確認は Set / Map で行う。
+  // SET 行は表の列順（ordinal）で出力する。
+  const setNames = [...new Set(names)]
+    .filter((n) => byName.has(n))
+    .sort((a, b) => (byName.get(a).ordinal || 0) - (byName.get(b).ordinal || 0));
   if (!setNames.length) warnings.push('更新する列が選択されていません。');
   const isFullSet = setNames.length === byName.size;
   if (!isFullSet && table.primaryKey?.some((pk) => setNames.includes(pk))) {
@@ -359,7 +413,7 @@ export function buildSql(metadata, kind, cfg) {
 
 /** WHERE 条件の新規 1 行 */
 export function newCondition(column = '', op = '=') {
-  return { column, op, value: '', value2: '', conjunction: 'AND', comment: '' };
+  return { column, op, value: '', value2: '', conjunction: 'AND', comment: '', if: false, variable: '' };
 }
 
 /** テーブル一覧を id で参照しやすい形にする（UI 用） */

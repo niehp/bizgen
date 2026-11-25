@@ -73,8 +73,11 @@ export function parseImageDataUrl(input, { maxBytes = MAX_BYTES } = {}) {
 
   let mime = m[1].toLowerCase();
   if (mime === 'image/jpg') mime = 'image/jpeg';
+  if (mime === 'image/svg+xml') {
+    throw new Error('SVG 请在页面上传：页面会自动转换为 PNG 后再解析；直接调用接口时请传 PNG / JPG / WEBP');
+  }
   if (!ALLOWED.includes(mime)) {
-    throw new Error(`暂不支持 ${mime}：请另存为 PNG / JPG / WEBP 后再上传`);
+    throw new Error(`暂不支持 ${mime}：请上传 PNG / JPG / WEBP / GIF / BMP`);
   }
 
   const buffer = Buffer.from(m[2].replace(/\s+/g, ''), 'base64');

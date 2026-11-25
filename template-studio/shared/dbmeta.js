@@ -116,6 +116,17 @@ export function isDateType(type) {
   return DATE_SQL_TYPES.has(sqlTypeHead(type));
 }
 
+const NON_CHARACTER_SQL_TYPES = new Set([
+  ...NUMERIC_SQL_TYPES, ...DATE_SQL_TYPES,
+  'bool', 'boolean', 'json', 'jsonb', 'uuid', 'bytea', 'interval',
+]);
+
+/** 文字型かどうか。IF 文の条件（!= "" も付けるか）を決めるために使う。型不明は文字型扱いしない。 */
+export function isCharacterType(type) {
+  const head = sqlTypeHead(type);
+  return Boolean(head) && !NON_CHARACTER_SQL_TYPES.has(head);
+}
+
 const matches = (values, q) => values.some((v) => String(v ?? '').toLowerCase().includes(q));
 
 /** テーブル名 / スキーマ / 表コメントの部分一致（大小文字無視）。表示のみに使う */
@@ -313,11 +324,41 @@ export function inferJoinPairs(metadata, leftTable, rightTable) {
   return pairs.sort((a, b) => a.rank - b.rank);
 }
 
+/**
+ * テーブル別名はスネークケースの各セグメント先頭文字を連結する。
+ *   m_customer     -> mc
+ *   t_order_detail -> tod
+ *   public.m_user  -> mu（スキーマ名は使わない）
+ * セグメントが 1 つだけの名前（orders など）は先頭 3 文字を使い、1 文字の別名を避ける。
+ */
+export function tableAlias(name) {
+  const raw = String(name ?? '').trim().split('.').pop() || '';
+  const cleaned = raw.replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  const segments = cleaned.split('_').filter(Boolean);
+  let base;
+  if (segments.length > 1) {
+    base = segments.map((s) => s.charAt(0)).join('');
+  } else {
+    const word = segments[0] || 'table';
+    base = word.slice(0, Math.min(3, word.length));
+  }
+  return (base || 'tbl').toLowerCase();
+}
+
 /** 選択テーブル列から FROM + JOIN の実行順を組み立てる */
 export function autoJoinPlan(metadata, tableIds) {
   const tables = (tableIds || []).map((id) => findTable(metadata, id)).filter(Boolean);
   const aliases = {};
-  tables.forEach((t, i) => { aliases[t.id] = `t${i + 1}`; });
+  const usedAliases = new Set();
+  tables.forEach((t) => {
+    const base = tableAlias(t.name || t.id);
+    // 同じ先頭文字の組み合わせになるテーブルは、選択順に 2, 3, ... を付けて一意にする
+    let alias = base;
+    let n = 2;
+    while (usedAliases.has(alias)) alias = `${base}${n++}`;
+    usedAliases.add(alias);
+    aliases[t.id] = alias;
+  });
   const joins = tables.map((t, i) => {
     const alias = aliases[t.id];
     if (i === 0) {

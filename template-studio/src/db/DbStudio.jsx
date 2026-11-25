@@ -34,6 +34,7 @@ const DEFAULT_OPTIONS = {
   quoteIdentifiers: false,
   includeSchema: true,
   addComments: false,
+  showColumnComments: true,
   columnAlias: true,
 };
 

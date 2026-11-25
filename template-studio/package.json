@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "start": "node server/index.js",
     "insert": "node cli/ExcelToSql.mjs",
-    "java-index": "node cli/java-index.mjs"
+    "java-index": "node cli/java-index.mjs",
+    "spec": "node scripts/build-spec.mjs"
   },
   "dependencies": {
     "cors": "^2.8.5",

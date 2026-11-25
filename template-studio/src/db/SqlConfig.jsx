@@ -140,6 +140,22 @@ function ConditionEditor({ conditions, onChange, columnOptions, bulkColumnOption
                 onChange={(e) => patch(i, 'value2', e.target.value)}
               />
             )}
+            <label className="cond-if" title="IF ブロックで囲む（文字型: != '' && != null / それ以外: != null）">
+              <input
+                type="checkbox"
+                checked={Boolean(c.if)}
+                onChange={(e) => patch(i, 'if', e.target.checked)}
+              />IF
+            </label>
+            {c.if && (
+              <input
+                className="control cond-val cond-var"
+                value={c.variable ?? ''}
+                placeholder={camelCase(c.column)}
+                title="IF 条件の変数名（空欄＝列名の camelCase）"
+                onChange={(e) => patch(i, 'variable', e.target.value)}
+              />
+            )}
             <button
               type="button" className="tbl-del" title="条件を削除"
               onClick={() => onChange(conditions.filter((_, n) => n !== i))}
@@ -161,7 +177,7 @@ function ConditionEditor({ conditions, onChange, columnOptions, bulkColumnOption
   );
 }
 
-function JoinEditor({ plan, joinCfg, onJoinType, onOnPairs, onResetOn, onRemoveJoinTable, allColumnOptions }) {
+function JoinEditor({ plan, joinCfg, onJoinType, onOnPairs, onResetOn, onRemoveJoinTable, allColumnOptions, style, typeOf }) {
   if (!plan || plan.joins.length < 2) {
     return <div className="db-empty">結合するテーブルを 2 つ以上選択してください</div>;
   }
@@ -205,10 +221,29 @@ function JoinEditor({ plan, joinCfg, onJoinType, onOnPairs, onResetOn, onRemoveJ
                   {allColumnOptions.map((o) => <option key={o.value} value={o.value}>{o.value}</option>)}
                 </select>
                 <span className="cond-eq">=</span>
-                <select className="control cond-col" value={p.right} onChange={(e) => patchPair(n, 'right', e.target.value)}>
-                  <option value="">（右列）</option>
-                  {rightOptions.map((o) => <option key={o.value} value={o.value}>{o.value}</option>)}
+                <select
+                  className="control cond-op cond-mode"
+                  value={p.rightMode || 'column'}
+                  title="右辺を列参照にするか入力値にするか"
+                  onChange={(e) => patchPair(n, 'rightMode', e.target.value)}
+                >
+                  <option value="column">右辺: 列</option>
+                  <option value="value">右辺: 値</option>
                 </select>
+                {(p.rightMode || 'column') === 'column' ? (
+                  <select className="control cond-col" value={p.right} onChange={(e) => patchPair(n, 'right', e.target.value)}>
+                    <option value="">（右列）</option>
+                    {rightOptions.map((o) => <option key={o.value} value={o.value}>{o.value}</option>)}
+                  </select>
+                ) : (
+                  <input
+                    className="control cond-val"
+                    value={p.rightValue ?? ''}
+                    placeholder={placeholder(p.left, style, literalFlags(typeOf(p.left)))}
+                    title="空欄なら列型別のプレースホルダを出力"
+                    onChange={(e) => patchPair(n, 'rightValue', e.target.value)}
+                  />
+                )}
                 <button
                   type="button" className="tbl-del" title="条件を削除"
                   onClick={() => onOnPairs(idx, pairs.filter((_, m) => m !== n))}
@@ -351,7 +386,8 @@ export default function SqlConfig({
           <div className="db-switches">
             <label className="switch"><input type="checkbox" checked={options.quoteIdentifiers} onChange={(e) => onOptions({ quoteIdentifiers: e.target.checked })} /><span>識別子を引用</span></label>
             <label className="switch"><input type="checkbox" checked={options.includeSchema} onChange={(e) => onOptions({ includeSchema: e.target.checked })} /><span>スキーマ名を付与</span></label>
-            <label className="switch"><input type="checkbox" checked={options.addComments} onChange={(e) => onOptions({ addComments: e.target.checked })} /><span>列コメントを付与</span></label>
+            <label className="switch"><input type="checkbox" checked={options.addComments} onChange={(e) => onOptions({ addComments: e.target.checked })} /><span>列コメントを付与（SELECT）</span></label>
+            <label className="switch"><input type="checkbox" checked={options.showColumnComments !== false} onChange={(e) => onOptions({ showColumnComments: e.target.checked })} /><span>列コメントを表示（UPDATE/DELETE）</span></label>
             {sqlKind === 'join' && (
               <>
                 <label className="switch"><input type="checkbox" checked={options.columnAlias} onChange={(e) => onOptions({ columnAlias: e.target.checked })} /><span>列に別名を付与</span></label>
@@ -365,7 +401,7 @@ export default function SqlConfig({
               <input
                 className="control"
                 value={joinCfg.orderBy || ''}
-                placeholder="例: t1.org_id ASC"
+                placeholder="例: mo.org_id ASC（別名は表名の各セグメント先頭文字）"
                 onChange={(e) => onSetOrderBy(e.target.value)}
               />
             </label>
@@ -402,6 +438,8 @@ export default function SqlConfig({
             onResetOn={onResetOn}
             onRemoveJoinTable={onRemoveJoinTable}
             allColumnOptions={allScoped.list}
+            style={options.placeholderStyle}
+            typeOf={typeOf}
           />
         )}
 
@@ -425,7 +463,9 @@ export default function SqlConfig({
           条件値の埋め込みコメントは指定書式のバインド名です。
           UPDATE の SET は表の全列が既定で、不要な列は左の列一覧で解除できます。
           条件列・SET 列とも「全選択 / 全解除」で一括設定できます。
-          結合条件パネルの「この表を削除」で結合からテーブルを外せます。
+          結合条件パネルの「この表を削除」で結合からテーブルを外せます。右辺は「値」に切り替えて入力値も使えます。
+          WHERE 条件の「IF」をチェックすると、文字型は /*IF 変数 != &quot;&quot; &amp;&amp; 変数 != null*/、それ以外は /*IF 変数 != null*/ を生成し、/*END*/ で閉じます。
+          ON / AND は 1 行ずつ、列順はテーブル定義順に出力します。
           SQL は右側に選択中の 1 種類だけを全件表示し、ダウンロード（.sql 自動付与）に対応します。
         </div>
       </div>

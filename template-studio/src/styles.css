@@ -587,6 +587,10 @@ body {
 .cond-op { width: 96px; flex: none; }
 .cond-val { flex: 1; min-width: 100px; font-family: var(--mono); }
 .cond-eq { font-family: var(--mono); color: var(--muted); }
+.cond-if { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; color: var(--teal); white-space: nowrap; }
+.cond-if input { accent-color: var(--teal); margin: 0; width: 13px; height: 13px; }
+.cond-var { max-width: 150px; color: var(--teal); }
+.cond-mode { width: 104px; flex: none; font-size: 10px !important; }
 .join-block { padding: 7px; margin-bottom: 7px; border: 1px dashed var(--border-strong); border-radius: 7px; background: var(--surface-soft); }
 .join-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
 .set-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
