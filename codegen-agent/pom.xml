@@ -18,13 +18,42 @@
     <maven.compiler.target>1.8</maven.compiler.target>
   </properties>
 
-  <!-- 外部依存を意図的に持たない。オフライン／閉域環境でもビルド可能にするため。 -->
+  <!--
+    JDT AST と SQLite のみ使用する。いずれもローカル解析・ローカル索引であり、
+    LLM 呼び出しと同様に外部送信は行わない（初回依存取得後はオフラインビルド可能）。
+  -->
   <dependencies>
+    <dependency>
+      <groupId>org.eclipse.jdt</groupId>
+      <artifactId>org.eclipse.jdt.core</artifactId>
+      <version>3.18.0</version>
+    </dependency>
+    <dependency>
+      <groupId>org.xerial</groupId>
+      <artifactId>sqlite-jdbc</artifactId>
+      <version>3.49.1.0</version>
+    </dependency>
   </dependencies>
 
   <build>
     <finalName>bizgen-agent</finalName>
     <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <version>3.6.1</version>
+        <executions>
+          <execution>
+            <id>copy-runtime-libs</id>
+            <phase>prepare-package</phase>
+            <goals><goal>copy-dependencies</goal></goals>
+            <configuration>
+              <includeScope>runtime</includeScope>
+              <outputDirectory>${project.build.directory}/lib</outputDirectory>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-jar-plugin</artifactId>
@@ -33,6 +62,8 @@
           <archive>
             <manifest>
               <mainClass>com.walk_nie.bizgen.agent.AgentApplication</mainClass>
+              <addClasspath>true</addClasspath>
+              <classpathPrefix>lib/</classpathPrefix>
             </manifest>
           </archive>
         </configuration>

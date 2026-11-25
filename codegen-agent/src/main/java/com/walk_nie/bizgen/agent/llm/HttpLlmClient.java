@@ -101,6 +101,10 @@ public final class HttpLlmClient implements LlmClient {
         }
         try {
             String host = new URL(endpoint).getHost().toLowerCase(java.util.Locale.ROOT);
+            // URL#getHost は IPv6 リテラルを [::1] のように括弧付きで返すため正規化する。
+            if (host.startsWith("[") && host.endsWith("]")) {
+                host = host.substring(1, host.length() - 1);
+            }
             boolean local = "localhost".equals(host) || "127.0.0.1".equals(host) || "::1".equals(host);
             if (!local) {
                 throw new LlmException("データ外部漏洩防止のため、ローカルホスト以外への LLM 接続は拒否されます: "

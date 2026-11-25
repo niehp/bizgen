@@ -1,25 +1,24 @@
 @echo off
-setlocal enabledelayedexpansion
-REM Maven が無い環境でもビルドできる、JDK のみのビルドスクリプト。
+setlocal
+REM JDT / SQLite 依存を持つため、ビルドは Maven に統一する。
+REM 初回取得後は mvn -o package でオフラインビルドも可能。
 set "ROOT=%~dp0"
-set "SRC=%ROOT%src\main\java"
-set "OUT=%ROOT%target\classes"
-set "JAR=%ROOT%target\bizgen-agent.jar"
-
-if exist "%OUT%" rmdir /s /q "%OUT%"
-mkdir "%OUT%" 2>nul
-if not exist "%ROOT%target" mkdir "%ROOT%target" 2>nul
-
-dir /s /b "%SRC%\*.java" > "%ROOT%target\sources.txt"
-javac -encoding UTF-8 -source 1.8 -target 1.8 -d "%OUT%" @"%ROOT%target\sources.txt"
+where mvn >nul 2>&1
 if errorlevel 1 (
-  echo [BUILD FAILED] javac error
+  echo [BUILD FAILED] Maven ga mitsukarimasen. JDT / SQLite no dependency kaiketsu ni Maven ga hitsuyou desu.
   exit /b 1
 )
-
-jar cfe "%JAR%" com.walk_nie.bizgen.agent.AgentApplication -C "%OUT%" .
+pushd "%ROOT%"
+call mvn -q -DskipTests package
 if errorlevel 1 (
-  echo [BUILD FAILED] jar error
+  popd
+  echo [BUILD FAILED] mvn package error
+  exit /b 1
+)
+popd
+set "JAR=%ROOT%target\bizgen-agent.jar"
+if not exist "%JAR%" (
+  echo [BUILD FAILED] %JAR% ga sakusei saremashita
   exit /b 1
 )
 echo [BUILD OK] %JAR%
