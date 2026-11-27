@@ -29,20 +29,8 @@
 ## 意味マッピング
 {{semanticMap}}
 
-## 术语（日本語 → 英語）
-{{termsText}}
-
-## 利用可能な既存 API（機能記述の意味解析 → 検索意図 → API 库から取得した実在シグネチャ。ここに無い API は使わない）
-{{apisText}}
-
-## 類似コード（機能記述の意味解析 → 検索意図 → 既存 Java 库から取得した本物の命中。機能を持ち込まないこと）
-{{similarCode}}
-
-## 再利用可能なテンプレート（採用判断はコード側。説明とキーワードを description / apiQuery に反映すること）
-{{reusableHints}}
-
-## 参考資料（spec/api・spec/dict・spec/template・spec/example。要件理解と分類の参考。機能を持ち込まないこと）
-{{specText}}
+## 知識の取得（function tool）
+{{knowledgeInstruction}}
 
 ## 出力形式
 

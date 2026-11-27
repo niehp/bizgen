@@ -7,7 +7,6 @@ import com.walk_nie.bizgen.agent.pipeline.stage.ClassifyIntentStage;
 import com.walk_nie.bizgen.agent.pipeline.stage.ExtractTermsStage;
 import com.walk_nie.bizgen.agent.pipeline.stage.LoadDesignStage;
 import com.walk_nie.bizgen.agent.pipeline.stage.LoadFeatureStage;
-import com.walk_nie.bizgen.agent.pipeline.stage.LoadSpecStage;
 import com.walk_nie.bizgen.agent.pipeline.stage.MatchApiCatalogStage;
 import com.walk_nie.bizgen.agent.pipeline.stage.ResolveVariablesStage;
 import com.walk_nie.bizgen.agent.pipeline.stage.SearchExistingCodeStage;
@@ -38,7 +37,6 @@ public final class FlowCodegenPipeline {
                 "01-load-feature",
                 "02-load-design",
                 "03-resolve-variables",
-                "03b-load-spec",
                 "04-extract-terms",
                 "04b-semantic-retrieval",
                 "05-match-apis",
@@ -79,7 +77,6 @@ public final class FlowCodegenPipeline {
         new LoadFeatureStage().execute(java, context);
         new LoadDesignStage().execute(java, context);
         new ResolveVariablesStage().execute(java, context);
-        new LoadSpecStage().execute(java, context);
         new ExtractTermsStage().execute(java, context);
         new com.walk_nie.bizgen.agent.pipeline.stage.AnalyzeSemanticsStage().execute(java, context);
         new MatchApiCatalogStage().execute(java, context);

@@ -2,8 +2,6 @@
 
 ## 絶対ルール
 
-{{retrievalInstruction}}
-
 - 出力はこのブロックの Java コード片のみ。説明文・コードフェンス・クラス宣言・package 宣言は書かない。
 - ここに無い既存 API を勝手に呼ばない。API 呼び出しが必要なら、そのブロックは API 側で担当する。
 - 仕様に無い機能・類似コードにあった別機能は持ち込まない。
@@ -21,17 +19,8 @@
 ## クラス名
 {{className}}
 
-## 术语（日本語 → 英語。命名に使う）
-{{termsText}}
-
-## 利用可能な既存 API（呼ばないこと。参考としてのみ）
-{{apisText}}
+## 知識の取得（function tool）
+{{knowledgeInstruction}}
 
 ## 設計資料
 {{designDocs}}
-
-## 類似コード（事前差し込みはしない。semantic_search ツールで自ら探した本物の命中を使う）
-{{similarCode}}
-
-## 参考資料（spec/api・spec/dict・spec/template・spec/example。命名・术语・書き方の参考のみ。機能例の別機能を持ち込まない）
-{{specText}}

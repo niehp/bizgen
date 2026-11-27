@@ -86,7 +86,7 @@ list java|project|usecase|class|method|schema|prompt|template
 template java-class|table-schema [--out <file>]      输出 md 模板
 pipeline java|sql|feature|flow        查看流水线阶段（区分 CODE / LLM）
 preview java --feature <md名>         只展开 prompt，不调用模型（含真实检索到的类似代码）
-preview sql --type select --desc "..." --tables "受注,顧客" [--shape "..."]
+preview sql --type select --desc "..." --tables "受注,顧客" [--shape "..."]   查看 SQL flow 工具与展开后的 prompt（不调模型）
 preview agent                         查看 Agent 工具定义与 system prompt 模板
 search --feature <md名>               只执行既有代码检索，不调用模型
 tools                                 查看已注册的 function tools 与上限
@@ -193,13 +193,22 @@ className: {{entityName|大驼峰}}QueryService
 
 解析结果：`title=受注検索サービスの新規作成`、`targetFile=com/walk_nie/bizgen/sample/OrderQueryService`。未定义变量或循环引用会保留 `{{...}}` 原文，`plan --feature` 会打印 `[WARN] 未解決の front matter 変数`。设计 md 的 front matter 同样参与变量展开。
 
-## SQL 生成
+## SQL 生成（flow pipeline 式）
+
+SQL 生成与 Java flowGen 使用同一套路：确定性前置 → 模型用 function tool 取知识 → 确定性写盘。
+
+| 阶段 | 担当 | 内容 |
+| --- | --- | --- |
+| 1 | 代码 | 校验输入（表数不超过 `gen.maxTables`）、确定变量（`sql-flow-01-prepare`） |
+| 2 | 模型 + tool | 用 `list_tables` / `load_table_schema` 取表结构、`translate_terms` / `inject_terms` 取日英对訳、`lookup_variable` 取变量、`load_spec` 取模板，然后生成 SQL（`sql-flow-02-generate`） |
+| 3 | 代码 | 写盘，并记录模型实际读过的表用于人工审核（`04-write-sql`） |
 
 - 表结构：一表一 md，见 `md/schema/受注.md`、`md/schema/顧客.md`，模板见 `md/template/table-schema.md`
 - SQL 功能 md 模板见 `md/template/sql-feature.md`；`sql-gen` 也支持 `--fields "受注.受注ID,顧客.顧客名"`
-- prompt：`md/prompt/select-sql.md`（支持多表 JOIN）、`update-sql.md`、`delete-sql.md`
-- 只把 SQL 中用到的表结构喂给模型，超过 `gen.maxTables` 直接报错，不静默截断
--  Japanese 表名/字段名 → 查表结构 → 英语物理名，在送入模型前完成转换；prompt 与 md 中可直接使用日语
+- flow prompt：`md/prompt/sql-flow.md`（知识全部由模型 tool 获取，不再静态注入表结构）；旧的 `select-sql.md`（支持多表 JOIN）、`update-sql.md`、`delete-sql.md` 仍保留供 `preview` 与旧链路使用
+- 只把 SQL 中用到的表结构喂给模型：模型自己按需要调用 `load_table_schema`，超过 `gen.maxTables` 时工具报错而非静默截断
+- 日语表名/字段名 → 表结构 → 英语物理名，由模型用工具获取的对訳确定；prompt 与 md 中可直接使用日语
+- 旧的单发链路已改为 flow：`sql-gen` / `gen --feature xxx`（SQL 分支）/ `flow-gen --feature xxx`（SQL 分支）现在都走同一条 flow pipeline
 
 SQL 变量格式（按类型固定）：
 
@@ -213,7 +222,7 @@ SQL 变量格式（按类型固定）：
 
 ## Agent 模式（多轮 function tool）
 
-`java-gen` / `sql-gen` 是单发流水线；`agent-gen` / `agent-sql` 则启用**状态管理 + 多轮模型调用 + function tool**。
+`java-gen` / `flow-gen`（Java）/ `sql-gen` 是**确定性流水线**（其中 SQL 与 flow-gen 的 LLM 阶段也用 function tool 取知识）；`agent-gen` / `agent-sql` 则启用**完整的 Agent 状态管理 + 多轮模型调用 + function tool**。`agent-sql` 现在复用 SQL flow 的工具白名单与 `sql-flow.md` prompt，不再静态注入表结构。
 
 ### 状态与循环
 
@@ -227,15 +236,15 @@ SQL 变量格式（按类型固定）：
 
 | 工具 | 用途 | 模式 |
 | --- | --- | --- |
-| `list_design_docs` | 列出五级设计 md | Java / SQL |
-| `load_design_doc` | 读取指定级别的设计 md（正文有字符上限） | Java / SQL |
-| `search_similar_code` | 用指定关键词确定性检索既有 Java 类似代码 | Java |
-| `read_java_file` | 读取配置根目录内的既有 Java（拒绝路径穿越） | Java |
+| `list_design_docs` / `load_design_doc` | 列出、读取五级设计 md（正文有字符上限） | Java / SQL |
+| `lookup_variable` | 从功能 md 变量表取确定值，并按 6 种命名风格（首字母大/小写、大/小驼峰、大/小蛇形）转换；未定义即报错 | Java / SQL |
+| `translate_terms` / `inject_terms` | 用术语库做日语→英语映射、给功能/设计文本注入对訳表；词典外不翻译 | Java / SQL |
+| `load_spec` | 按 `api` / `dict` / `template` / `example` 列出或读取 `spec/*.md`，变量已由代码展开 | Java / SQL |
 | `find_api` | 由模型主动检索 API 库；只返回 md 中真实存在的签名，并记录选中结果供人工审核 | Java |
-| `list_tables` | 列出可用表结构 md | SQL |
-| `load_table_schema` | 读取指定表的结构，超过 `gen.maxTables` 报错而非截断 | SQL |
+| `search_similar_code` / `read_java_file` | 确定性检索既有 Java 类似代码、读取配置根目录内的既有 Java（拒绝路径穿越） | Java |
+| `list_tables` / `load_table_schema` | 列出表结构 md、读取指定表结构；超过 `gen.maxTables` 报错而非截断 | SQL |
 
-工具执行失败也会作为 `[ERROR]` 文本返回给模型，让其自行修正后重试；未注册工具与非法参数由代码直接拒绝。所有工具结果都有字符上限，保护 14B 上下文。
+上表是常用工具；完整白名单（含 JDT AST 的 `find_class` / `find_method` / `propose_java_edit` / `approve_java_edit` 等 12 个工具、复用模板工具）以 `tools` 命令输出为准。工具执行失败也会作为 `[ERROR]` 文本返回给模型，让其自行修正后重试；未注册工具与非法参数由代码直接拒绝。所有工具结果都有字符上限，保护 14B 上下文。
 
 ### 使用
 
@@ -247,9 +256,9 @@ agent-trace
 
 `preview agent` 可查看工具定义与 system prompt 模板，`tools` 只看工具列表——两者都不调用模型。Agent 模式下**写盘仍然只由代码侧的最终阶段执行**，且仍受 `gen.reviewRequired` 约束。
 
-Java 生成时，模型可先用 `find_api` 决定调用哪些既存 API：工具只从 `md/api` 返回真实签名（可按 `className` 收窄），模型再把 API 调用与新写的代码组合成一个类。代码侧会把术语表和预检索到的 API 一并放进 system prompt；工具实际返回过的 API 会在 `agent-gen` 输出里以「モデルが find_api で確認した API」列出，便于人工审核。
+Java 生成时，模型可先用 `find_api` 决定调用哪些既存 API：工具只从 `md/api` 返回真实签名（可按 `className` 收窄），模型再把 API 调用与新写的代码组合成一个类。`lookup_variable`、`translate_terms`、`load_spec` 分别把变量、日英对訳、`spec/{api,dict,template,example}` 资料改为模型按需调用；工具结果仍全部受字符上限与白名单校验。工具实际返回过的 API 会在 `agent-gen` 输出里以「モデルが find_api で確認した API」列出，便于人工审核。
 
-prompt 模板：`md/prompt/agent-java.md`、`md/prompt/agent-sql.md`。
+prompt 模板：`md/prompt/agent-java.md`；SQL（flow 与 agent-sql 共用）为 `md/prompt/sql-flow.md`。
 
 ### 工具调用没有出现时（Qwen2.5-Coder + LM Studio）
 
@@ -272,43 +281,40 @@ Qwen2.5-Coder 不在 LM Studio 的 **native tool use** 支持列表中，常把�
 
 ## 6 ステップ Flow Pipeline（flow-gen）
 
-`flow-gen --feature <md名>` は、需求に定義された 6 ステップをそのまま実行する。
+`flow-gen --feature <md名>` は、機能 md の `generate: java|sql|both` を読んで生成先を振り分ける（既定は `java`）。`both` なら Flow Pipeline で Java を生成した後に SQL も生成する。
 
 | ステップ | 担当 | 内容 |
 | --- | --- | --- |
-| 1 | コード | 機能 md を読み込む |
+| 1 | コード | 機能 md を読み込み、`generate` と SQL 種別・表を確定 |
 | 2 | コード | `{{変数}}` を展開（設計 md も展開） |
-| 3 | モデル | 意味を解析し、コードの流れと機能ブロックに分解（`code-plan.md`） |
-| 4 | モデル + tool | API ブロックは `find_api` function tool で実在シグネチャを定位、それ以外は新規コード生成（`code-block-api.md` / `code-block-new.md`） |
+| 3 | モデル + tool | 意味を解析し、コードの流れと機能ブロックに分解（`code-plan.md`） |
+| 4 | モデル + tool | API ブロックは `find_api`、それ以外は `search_similar_code` / `semantic_search` で実在の根拠を集めてコード生成 |
 | 5 | コード | 機能ブロックを最後まで 1 つずつループ（上限 `gen.maxBlocks=12`、進行は `FlowGenState` が管理） |
-| 6 | モデル | 全ブロックを 1 クラスに結合し、日本語コメントを潤色（`combine-polish.md`） |
-| 7 | コード | 参考資料（下記）を読み込み、変数展開して全 prompt に注入（`03b-load-spec`） |
+| 6 | モデル + tool | 全ブロックを 1 クラスに結合し、日本語コメントを潤色（`combine-polish.md`） |
+| 7 | コード | 静的検証 → 1 回だけ自己修正 → パス構造に沿って UTF-8 落盤 |
 
-その後、既存の `java-gen` と同じ「静的検証 → 1 回だけ自己修正 → パス構造に沿って UTF-8 落盤」を通る。
 `agent-gen` がモデルに探索を任せるのに対し、flow-gen は**ループ回数とブロック順をコード側が固定**し、モデルには各ブロックの中身だけを任せる。
 
-出力にはコードの流れ・各ブロックの種別と確認済み API・ツールで確認した API 一覧が表示され、人工レビューに使える。ローカル LLM サービス自体は起動している必要がある。
+### 知識はすべて function tool で取得
+
+flow-gen の 4 つの LLM ステージ（ブロック計画 / API ブロック / 新規ブロック / 結合・潤色）は、変数・API・术语・日英対訳・類似コード・テンプレートを prompt へ事前注入しない。代わりに共通白名单 `FlowAgentSupport.tools()` から次を必要に応じて呼ぶ。
+
+| 工具 | 用途 |
+| --- | --- |
+| `lookup_variable` | `{{変数}}` の確定値と 6 種命名スタイル |
+| `translate_terms` / `inject_terms` | 术语库だけを使った日本語→英語変換・対訳表 |
+| `load_spec` | `spec/api`・`spec/dict`・`spec/template`・`spec/example` の一覧／取得 |
+| `find_api` | 実在シグネチャの確定（API ブロック） |
+| `search_similar_code` / `semantic_search` | 既存 Java の本物の実装を検索（無命中はログ） |
+| `list_design_docs` / `load_design_doc` / `read_java_file` | 設計規約・対象ファイルの確認 |
+
+- どのツールを呼ぶかはモデルが決めるが、**白名单・引数検証・結果の文字数上限・ループ上限はすべてコード側**（`AgentLoop` / `ToolRegistry`）。
+- `java-gen` の `LoadSpecStage` による一括注入は従来どおり残っているが、flow-gen では実行しない。
 
 ```
-flow-gen --feature sample-order-query-service
-pipeline flow        # 14 ステージの順番を表示
+flow-gen --feature sample-order-query-service   # generate: java|both なら Java を生成
+pipeline flow        # ステージ順番を表示
 ```
-
-### ステップ 7: 参考資料（spec）の prompt 注入
-
-モデルが要件を理解しやすくするため、`path.specRoot`（既定 `spec`）配下の 4 類の md を**すべて読み込み、変数展開して** prompt の「参考資料」段落へ注入する。
-
-| ディレクトリ | 内容 | モデルの使い方 |
-| --- | --- | --- |
-| `spec/api/*.md` | 利用可能な API メソッドシグネチャ | 呼び出し先の候補（白名单はあくまで `apiRoot`） |
-| `spec/dict/*.md` | 术语（日本語 -> 英語） | 識別子の命名 |
-| `spec/template/*.md` | コード／出力テンプレート | クラス骨格・Javadoc 粒度の参考 |
-| `spec/example/*.md` | 機能インスタンス（完成済み機能の例） | 書き方の参考。機能を持ち込まない |
-
-- 読み込みはコード側で決定論的に行う（パス昇順、`.md` のみ、`{{変数}}` は機能 md の変数で展開）。モデルに「どの資料を読むか」を選ばせない。
-- 注入先: `java-generate.md` / `code-plan.md` / `code-block-api.md` / `code-block-new.md` / `combine-polish.md` の `{{specText}}`。
-- `spec.maxChars`（既定 24000）を超えると黙って切り捨てずエラーとし、14B のコンテキスト保護と情報の黙った消失を防ぐ。
-- `java-gen` と `flow-gen` の両方で有効。`LoadSpecStage` は位相を進めず、LLM も呼ばない。
 
 ```
 spec-list   # 4 類の資料一覧（LLM 不使用）

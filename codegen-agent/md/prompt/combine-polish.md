@@ -36,11 +36,8 @@
 ## 設計資料
 {{designDocs}}
 
-## 术语（日本語 → 英語）
-{{termsText}}
-
-## 参考資料（spec/api・spec/dict・spec/template・spec/example。Javadoc と命名の粒度を揃える参考のみ。機能を持ち込まないこと）
-{{specText}}
+## 知識の取得（function tool）
+{{knowledgeInstruction}}
 
 ## 固定フラグメント（コード側で選択・変数展開済み。変更禁止）
 {{fixedFragments}}

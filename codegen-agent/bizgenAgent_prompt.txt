@@ -137,7 +137,7 @@ AI Agent的要求
     如果有生成sql，
       md文件会写，是select、update，delete
       对象表名，和对象字段。
-  
+    变量，api，术语，日语到英语的翻译，类似代码，模板等，通过function tool来实现
 JAVA生成
   Java生成整体步骤
     1.从md文件中读取需求描述

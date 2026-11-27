@@ -40,8 +40,11 @@ public final class WriteSqlStage implements Stage<SqlGenState, SqlGenState> {
         } catch (IOException e) {
             throw new IllegalStateException("SQL の書き出しに失敗: " + file, e);
         }
-        state.setResult(new SqlGenResult(request.type(), state.sql(), file,
-                state.dictionary().physicalNames()));
+        // flow 式では表構造をモデルが tool で読むため辞書は空。
+        // 監査用の使用表は tool で実際に読んだ表を優先し、旧方式は辞書から取る。
+        java.util.List<String> tableNames = state.usedTables().isEmpty()
+                ? state.dictionary().physicalNames() : state.usedTables();
+        state.setResult(new SqlGenResult(request.type(), state.sql(), file, tableNames));
         state.advance(SqlGenState.Phase.WRITTEN);
         return state;
     }

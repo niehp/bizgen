@@ -6,6 +6,7 @@ import com.walk_nie.bizgen.agent.agent.ToolHandler;
 import com.walk_nie.bizgen.agent.agent.ToolResult;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -42,14 +43,17 @@ public final class LoadTableSchemaTool implements ToolHandler {
                     + "必要な表だけを選んで再呼び出ししてください（暗黙の切り捨てはしません）。");
         }
         StringBuilder out = new StringBuilder();
+        List<String> loaded = new ArrayList<String>();
         for (String table : tables) {
             try {
                 out.append("===== ").append(table).append(" =====\n")
                         .append(context.repository().schema(table)).append("\n\n");
+                loaded.add(table);
             } catch (IOException e) {
                 return ToolResult.fail(null, "表構造の読み込みに失敗 (" + table + "): " + e.getMessage());
             }
         }
+        context.recordTables(loaded);
         return ToolResult.ok(null, ToolSupport.truncate(out.toString(), 16000));
     }
 }

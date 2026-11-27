@@ -26,6 +26,9 @@ public final class AgentContext {
     private final List<ReuseSelection> selectedReuses = new ArrayList<ReuseSelection>();
     /** モデルが semantic_search で自ら立てた意味解析の検索意図（監査用）。 */
     private final List<SemanticSearchIntent> semanticSearches = new ArrayList<SemanticSearchIntent>();
+    /** モデルが load_table_schema で実際に読んだ表名（監査・手レビュー用）。 */
+    private final java.util.Set<String> selectedTableKeys = new LinkedHashSet<String>();
+    private final List<String> selectedTables = new ArrayList<String>();
     /** 編集提案のうち、人間だけに見せる承認トークンを含む表示文。モデルへは渡さない。 */
     private String lastProposalForHuman = "";
 
@@ -89,6 +92,22 @@ public final class AgentContext {
 
     public List<SemanticSearchIntent> semanticSearches() {
         return Collections.unmodifiableList(semanticSearches);
+    }
+
+    /** モデルが load_table_schema で参照した表を記録する（監査・手レビュー用）。 */
+    public void recordTables(java.util.Collection<String> names) {
+        if (names == null) {
+            return;
+        }
+        for (String name : names) {
+            if (name != null && selectedTableKeys.add(name)) {
+                selectedTables.add(name);
+            }
+        }
+    }
+
+    public List<String> selectedTables() {
+        return Collections.unmodifiableList(selectedTables);
     }
 
     /** 編集提案を人間向け表示として記録する（LLM への tool 結果には含めない）。 */

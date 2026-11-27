@@ -11,7 +11,10 @@ import com.walk_nie.bizgen.agent.agent.tool.FindSimilarMethodTool;
 import com.walk_nie.bizgen.agent.agent.tool.GetClassStructureTool;
 import com.walk_nie.bizgen.agent.agent.tool.GetDiffTool;
 import com.walk_nie.bizgen.agent.agent.tool.GetProjectRulesTool;
+import com.walk_nie.bizgen.agent.agent.tool.InjectTermsTool;
 import com.walk_nie.bizgen.agent.agent.tool.ListDesignDocsTool;
+import com.walk_nie.bizgen.agent.agent.tool.LoadSpecTool;
+import com.walk_nie.bizgen.agent.agent.tool.LookupVariableTool;
 import com.walk_nie.bizgen.agent.agent.tool.ListJavaFilesTool;
 import com.walk_nie.bizgen.agent.agent.tool.LoadDesignDocTool;
 import com.walk_nie.bizgen.agent.agent.tool.LoadTableSchemaTool;
@@ -21,6 +24,7 @@ import com.walk_nie.bizgen.agent.agent.tool.ProposeJavaEditTool;
 import com.walk_nie.bizgen.agent.agent.tool.SearchJavaCodeTool;
 import com.walk_nie.bizgen.agent.agent.tool.SearchSimilarCodeTool;
 import com.walk_nie.bizgen.agent.agent.tool.SemanticSearchTool;
+import com.walk_nie.bizgen.agent.agent.tool.TranslateTermsTool;
 import com.walk_nie.bizgen.agent.generator.CodegenSupport;
 import com.walk_nie.bizgen.agent.generator.java.JavaDraft;
 import com.walk_nie.bizgen.agent.generator.java.JavaGenState;
@@ -73,6 +77,11 @@ public final class AgentRunner {
         this.javaTools = new ToolRegistry()
                 .register(new ListDesignDocsTool())
                 .register(new LoadDesignDocTool())
+                // 変数・用語・spec 資料はすべて function tool 経由で取得する
+                .register(new LookupVariableTool())
+                .register(new TranslateTermsTool())
+                .register(new InjectTermsTool())
+                .register(new LoadSpecTool())
                 // 意味解析 → 既存库の検索はモデルが自ら申し出る（静的注入の代わり）
                 .register(new SemanticSearchTool())
                 .register(new SearchSimilarCodeTool())
@@ -93,10 +102,8 @@ public final class AgentRunner {
                 .register(new ProposeJavaEditTool())
                 .register(new GetDiffTool())
                 .register(new ApproveJavaEditTool());
-        this.sqlTools = new ToolRegistry()
-                .register(new ListTablesTool())
-                .register(new LoadTableSchemaTool())
-                .register(new LoadDesignDocTool());
+        // SQL 側も flow 式と同じ白名单を使う（二重管理を避ける）。
+        this.sqlTools = com.walk_nie.bizgen.agent.generator.sql.SqlFlowSupport.tools(pipeline.config());
     }
 
     public AgentResult lastResult() {
@@ -203,23 +210,19 @@ public final class AgentRunner {
         return state;
     }
 
-    /** SQL 生成。Agent が選んだ表構造のみを根拠にし、書き出しはコード側で行う。 */
+    /** SQL 生成（flow 式）。表構造・术语・辞書は Agent が function tool で取得し、書き出しはコード側で行う。 */
     public SqlGenState generateSql(SqlGenRequest request) throws IOException {
         SqlGenState state = new SqlGenState(request);
-        new LoadTableSchemaStage().execute(state, pipeline);
-        new RenderSqlPromptStage().execute(state, pipeline);
+        new com.walk_nie.bizgen.agent.pipeline.stage.flow.PrepareSqlFlowStage()
+                .execute(state, pipeline);
 
-        VariableTable variables = new VariableTable();
-        variables.put("sqlType", request.type().name());
-        variables.put("description", request.description());
-        variables.put("tables", request.tables().toString());
-        variables.put("sqlShape", request.sqlShape());
-        variables.put("renderedPrompt", state.renderedPrompt());
+        String system = state.flowVariables().resolveText(pipeline.repository().prompt("sql-flow"));
+        String user = request.type().name() + " SQL を生成してください。要求: " + request.description()
+                + "\n必要な情報は function tool で取得し、最後のターンは SQL 文のみを出力すること。";
 
-        String system = variables.resolveText(pipeline.repository().prompt("agent-sql"));
-        String user = request.type().name() + " SQL を生成してください。要求: " + request.description();
-
-        AgentLoop loop = new AgentLoop(sqlTools, context);
+        AgentContext sqlContext = com.walk_nie.bizgen.agent.generator.sql.SqlFlowSupport
+                .agentContext(pipeline, state.flowVariables());
+        AgentLoop loop = new AgentLoop(sqlTools, sqlContext);
         AgentResult result = loop.run(system, user);
         lastResult = result;
         if (!result.success()) {
@@ -227,6 +230,8 @@ public final class AgentRunner {
         }
 
         state.setSql(StrUtil.stripCodeFence(result.finalAnswer()).trim());
+        state.setUsedTables(sqlContext.selectedTables());
+        state.setAgentResult(result);
         state.advance(SqlGenState.Phase.GENERATED);
         new WriteSqlStage().execute(state, pipeline);
         return state;

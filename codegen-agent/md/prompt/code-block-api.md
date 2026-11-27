@@ -2,8 +2,6 @@
 
 ## 絶対ルール
 
-{{retrievalInstruction}}
-
 - 出力はこのブロックの Java コード片のみ。説明文・コードフェンス・クラス宣言・package 宣言は書かない。
 - 存在しない API は書かない。ツールが返した実在シグネチャ以外のメソッド・クラスを呼ばない。
 - API 呼び出しの前後に必要な最小限の前処理・後処理だけを書く。仕様外の機能は追加しない。
@@ -18,14 +16,8 @@
 ## 全体の流れ
 {{flow}}
 
-## 既存 API（意味解析で立てた検索意図に基づき API 库から取得した実在シグネチャ。足りなければツールで追加検索）
-{{apisText}}
-
-## 术语（日本語 → 英語）
-{{termsText}}
+## 知識の取得（function tool）
+{{knowledgeInstruction}}
 
 ## 設計資料
 {{designDocs}}
-
-## 参考資料（spec/api・spec/dict・spec/template・spec/example。シグネチャ確認と命名の参考。ここに無い API は呼ばない）
-{{specText}}

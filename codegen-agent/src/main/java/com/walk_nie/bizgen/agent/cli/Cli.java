@@ -216,8 +216,8 @@ public final class Cli {
         out.println("  spec-list                                 spec/api・dict・template・example の資料一覧（LLM 不使用）");
         out.println("  reuse-list                                再利用テンプレート（spec/block）一覧（LLM 不使用）");
         out.println("  feature-gen --feature <md名>              5 ステップ Pipeline で Java を生成・落盤");
-        out.println("  flow-gen --feature <md名>                 6 ステップ: 機能ブロック分解 → API は tool 定位 /");
-        out.println("                                            それ以外は新規生成 → ループ → 結合・潤色 → 落盤");
+        out.println("  flow-gen --feature <md名>                 md の generate: java|sql|both に従う Flow Pipeline:");
+        out.println("                                            機能ブロック分解 → tool で知識取得 → ループ → 結合・潤色 → 落盤");
         out.println("  agent-gen --feature <md名>                 マルチターン Agent + tool 呼び出しで Java 生成");
         out.println("  agent-sql --type select|update|delete --desc <内容> --tables <日本語表名,...>");
         out.println("  agent-trace                               直近の Agent ターントレースを表示");
@@ -350,9 +350,13 @@ public final class Cli {
         } else if ("sql".equalsIgnoreCase(target)) {
             SqlGenRequest request = buildSqlRequest(options);
             SqlGenState state = new SqlGenState(request);
-            new com.walk_nie.bizgen.agent.pipeline.stage.LoadTableSchemaStage().execute(state, context);
-            new com.walk_nie.bizgen.agent.pipeline.stage.RenderSqlPromptStage().execute(state, context);
-            out.println(state.renderedPrompt());
+            new com.walk_nie.bizgen.agent.pipeline.stage.flow.PrepareSqlFlowStage()
+                    .execute(state, context);
+            out.println("----- SQL flow tools -----");
+            out.print(com.walk_nie.bizgen.agent.generator.sql.SqlFlowSupport
+                    .tools(config).describe());
+            out.println("----- SQL flow system prompt -----");
+            out.println(state.flowVariables().resolveText(repository.prompt("sql-flow")));
         } else if ("agent".equalsIgnoreCase(target)) {
             previewAgent();
         } else {
@@ -369,7 +373,7 @@ public final class Cli {
         out.println("----- Java Agent system prompt (variables unresolved) -----");
         out.println(repository.prompt("agent-java"));
         out.println("----- SQL Agent system prompt (variables unresolved) -----");
-        out.println(repository.prompt("agent-sql"));
+        out.println(repository.prompt("sql-flow"));
     }
 
     /** LLM を使わず、類似コード検索だけを実行して結果を表示する。 */
@@ -628,47 +632,64 @@ public final class Cli {
         }
     }
 
-    private void flowGen(Map<String, String> options) {
+    private void flowGen(Map<String, String> options) throws IOException {
         String featureName = options.get("feature");
         if (StrUtil.isBlank(featureName)) {
             throw new IllegalArgumentException("--feature が必要です");
         }
-        com.walk_nie.bizgen.agent.generator.flow.FlowCodegenPipeline.Result result =
-                new com.walk_nie.bizgen.agent.generator.flow.FlowCodegenPipeline()
-                        .run(featureName, context);
-        com.walk_nie.bizgen.agent.generator.java.JavaWriteResult written = result.java().writeResult();
-        out.println("Flow Pipeline 完了: " + written.classFile());
-        if (written.packageInfoFile() != null) {
-            out.println("パッケージコメント: " + written.packageInfoFile());
-        }
-        out.println("コードの流れ: " + result.flow().plan().flow());
-        out.println("機能ブロック : " + result.flow().plan().blocks().size() + " 件 / 処理 "
-                + result.flow().blockRounds() + " 回");
-        for (com.walk_nie.bizgen.agent.generator.flow.CodePlan.Block block
-                : result.flow().plan().blocks()) {
-            out.println("  [" + block.index() + "] " + block.kind() + " " + block.description()
-                    + (block.apiSignature().isEmpty() ? "" : " → " + block.apiSignature()));
-        }
-        if (!result.flow().toolResolvedApis().isEmpty()) {
-            out.println("ツールで確認した API: " + result.flow().toolResolvedApis());
-        }
-        if (!result.flow().reuseSelections().isEmpty()) {
-            out.println("再利用テンプレート（コード側で確定）: "
-                    + result.flow().reuseSelections().size() + " 件");
-            for (com.walk_nie.bizgen.agent.reuse.ReuseSelection selection
-                    : result.flow().reuseSelections()) {
-                out.println("  - " + selection.blockId() + " [" + selection.kind().name()
-                        + "] score=" + selection.score()
-                        + (selection.apiSignature().isEmpty() ? "" : " → " + selection.apiSignature()));
+        com.walk_nie.bizgen.agent.md.FeatureSpec spec = repository.loadFeature(featureName);
+        String generate = generateKind(spec);
+        out.println("[FLOW] md=" + featureName + " generate=" + generate);
+
+        if ("java".equals(generate) || "both".equals(generate)) {
+            com.walk_nie.bizgen.agent.generator.flow.FlowCodegenPipeline.Result result =
+                    new com.walk_nie.bizgen.agent.generator.flow.FlowCodegenPipeline()
+                            .run(featureName, context);
+            com.walk_nie.bizgen.agent.generator.java.JavaWriteResult written = result.java().writeResult();
+            out.println("Flow Pipeline 完了: " + written.classFile());
+            if (written.packageInfoFile() != null) {
+                out.println("パッケージコメント: " + written.packageInfoFile());
+            }
+            out.println("コードの流れ: " + result.flow().plan().flow());
+            out.println("機能ブロック : " + result.flow().plan().blocks().size() + " 件 / 処理 "
+                    + result.flow().blockRounds() + " 回");
+            for (com.walk_nie.bizgen.agent.generator.flow.CodePlan.Block block
+                    : result.flow().plan().blocks()) {
+                out.println("  [" + block.index() + "] " + block.kind() + " " + block.description()
+                        + (block.apiSignature().isEmpty() ? "" : " → " + block.apiSignature()));
+            }
+            if (!result.flow().toolResolvedApis().isEmpty()) {
+                out.println("ツールで確認した API: " + result.flow().toolResolvedApis());
+            }
+            if (!result.flow().reuseSelections().isEmpty()) {
+                out.println("再利用テンプレート（コード側で確定）: "
+                        + result.flow().reuseSelections().size() + " 件");
+                for (com.walk_nie.bizgen.agent.reuse.ReuseSelection selection
+                        : result.flow().reuseSelections()) {
+                    out.println("  - " + selection.blockId() + " [" + selection.kind().name()
+                            + "] score=" + selection.score()
+                            + (selection.apiSignature().isEmpty() ? "" : " → " + selection.apiSignature()));
+                }
+            }
+            if (!written.warnings().isEmpty()) {
+                out.println("[WARN] 検証警告: " + written.warnings());
+            }
+            if (config.reviewRequired()) {
+                out.println("[REVIEW] 生成コードは人間がレビューしてから取り込んでください。");
             }
         }
-        if (!written.warnings().isEmpty()) {
-            out.println("[WARN] 検証警告: " + written.warnings());
-        }
-        if (config.reviewRequired()) {
-            out.println("[REVIEW] 生成コードは人間がレビューしてから取り込んでください。");
+        if ("sql".equals(generate) || "both".equals(generate)) {
+            runSqlFromMd(featureName, options, spec);
         }
         printTraces(context);
+    }
+
+    private static String generateKind(com.walk_nie.bizgen.agent.md.FeatureSpec spec) {
+        String generate = spec.generate().isEmpty() ? "java" : spec.generate();
+        if (!"java".equals(generate) && !"sql".equals(generate) && !"both".equals(generate)) {
+            throw new IllegalArgumentException("generate は java|sql|both のいずれかです: " + generate);
+        }
+        return generate;
     }
 
     private void agentGen(Map<String, String> options) throws IOException {
@@ -778,31 +799,34 @@ public final class Cli {
             throw new IllegalArgumentException("--feature が必要です");
         }
         com.walk_nie.bizgen.agent.md.FeatureSpec spec = repository.loadFeature(featureName);
-        String generate = spec.generate().isEmpty() ? "java" : spec.generate();
-        if (!"java".equals(generate) && !"sql".equals(generate) && !"both".equals(generate)) {
-            throw new IllegalArgumentException("generate は java|sql|both のいずれかです: " + generate);
-        }
+        String generate = generateKind(spec);
         out.println("[GEN] md=" + featureName + " generate=" + generate);
         if ("java".equals(generate) || "both".equals(generate)) {
             javaGen(options);
         }
         if ("sql".equals(generate) || "both".equals(generate)) {
-            SqlType type = SqlType.fromToken(spec.sqlType());
-            if (type == null) {
-                throw new IllegalArgumentException("SQL 生成には md の sqltype: select|update|delete が必要です");
-            }
-            Map<String, String> variables = new LinkedHashMap<String, String>(spec.variables());
-            SqlGenRequest request = new SqlGenRequest(type, spec.sqlDescription(), spec.sqlShape(),
-                    StrUtil.splitCsv(spec.tables()), spec.fields(), variables,
-                    options.get("out"), options.get("prompt"));
-            SqlGenState state = new SqlGenPipeline().run(request, context);
-            SqlGenResult result = state.result();
-            out.println("SQL 生成完了: " + result.file());
-            out.println("使用表: " + result.tableNames());
-            out.println("----- SQL -----");
-            out.println(result.sql());
+            runSqlFromMd(featureName, options, spec);
             printTraces(context);
         }
+    }
+
+    /** md に書かれた SQL 種別・表・変数から SqlGenPipeline を実行する（gen / flow-gen 共用）。 */
+    private void runSqlFromMd(String featureName, Map<String, String> options,
+                              com.walk_nie.bizgen.agent.md.FeatureSpec spec) {
+        SqlType type = SqlType.fromToken(spec.sqlType());
+        if (type == null) {
+            throw new IllegalArgumentException("SQL 生成には md の sqltype: select|update|delete が必要です");
+        }
+        Map<String, String> variables = new LinkedHashMap<String, String>(spec.variables());
+        SqlGenRequest request = new SqlGenRequest(type, spec.sqlDescription(), spec.sqlShape(),
+                StrUtil.splitCsv(spec.tables()), spec.fields(), variables,
+                options.get("out"), options.get("prompt"));
+        SqlGenState state = new SqlGenPipeline().run(request, context);
+        SqlGenResult result = state.result();
+        out.println("SQL 生成完了: " + result.file());
+        out.println("使用表: " + result.tableNames());
+        out.println("----- SQL -----");
+        out.println(result.sql());
     }
 
     private SqlGenRequest buildSqlRequest(Map<String, String> options) {
