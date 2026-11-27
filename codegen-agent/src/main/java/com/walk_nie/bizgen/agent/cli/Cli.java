@@ -135,6 +135,10 @@ public final class Cli {
             preview(options);
         } else if ("search".equals(command)) {
             search(options);
+        } else if ("gen".equals(command)) {
+            genFromMd(options);
+        } else if ("plan".equals(command)) {
+            planFromMd(options);
         } else if ("java-gen".equals(command)) {
             javaGen(options);
         } else if ("sql-gen".equals(command)) {
@@ -198,6 +202,8 @@ public final class Cli {
         out.println("  preview sql --type select|update|delete --desc <内容> --tables <日本語表名,...> [--shape <SQL雛形>]");
         out.println("  preview agent [--feature <md名>]                 エージェントのツールと system prompt を表示");
         out.println("  search --feature <md名>                    既存 Java の類似コード検索のみ実行（LLM 不使用）");
+        out.println("  gen --feature <md名>                       md の generate: java|sql|both に従って生成（統合入口）");
+        out.println("  plan --feature <md名>                      md の契約（生成種別／Java 契約／SQL 対象）を表示（LLM 不使用）");
         out.println("  java-gen --feature <md名>                 12 ステージの Java 生成フレームワークで生成");
         out.println("           （术语抽出 / API 匹配 / 静的検証 + 1 回自己修正 を含む）");
         out.println("  sql-gen --type select|update|delete --desc <内容> --tables <日本語表名,...>");
@@ -439,6 +445,9 @@ public final class Cli {
         variables.put("targetFile", resolved.spec().targetFile());
         variables.put("existingCode", "（プレビューのため省略）");
         variables.put("packageName", resolved.variable("packageName", "com.walk_nie.bizgen.generated"));
+        com.walk_nie.bizgen.agent.md.JavaFeatureOutline outline = resolved.spec().javaOutline();
+        variables.put("featureOutline", outline.isEmpty()
+                ? "（md に Java 契約の明示なし）" : outline.toPromptText());
         variables.put("className", className);
         variables.put("semanticMap", "（プレビューのため省略）");
         variables.put("featureBody", resolved.featureBody());
@@ -700,6 +709,68 @@ public final class Cli {
         }
     }
 
+    /** LLM を使わず、md に書かれた生成契約だけを表示する（入口確認用）。 */
+    private void planFromMd(Map<String, String> options) throws IOException {
+        String featureName = options.get("feature");
+        if (StrUtil.isBlank(featureName)) {
+            throw new IllegalArgumentException("--feature が必要です");
+        }
+        com.walk_nie.bizgen.agent.md.FeatureSpec spec = repository.loadFeature(featureName);
+        VariableTable variables = new VariableTable();
+        variables.putAll(spec.variables());
+        String generate = spec.generate().isEmpty() ? "java" : spec.generate();
+        out.println("md      : " + spec.doc().path());
+        out.println("title   : " + spec.title());
+        out.println("generate: " + generate);
+        if ("java".equals(generate) || "both".equals(generate)) {
+            com.walk_nie.bizgen.agent.md.JavaFeatureOutline outline = spec.javaOutline();
+            out.println("----- Java 契約（変数展開済み） -----");
+            out.println(outline.toPromptText());
+        }
+        if ("sql".equals(generate) || "both".equals(generate)) {
+            out.println("----- SQL 契約（変数展開済み） -----");
+            out.println("sqltype    : " + spec.sqlType());
+            out.println("tables     : " + (spec.tables().isEmpty() ? "（対象フィールド／本文から自動検出）" : spec.tables()));
+            out.println("fields     : " + spec.fields());
+            out.println("description: " + variables.resolveText(spec.sqlDescription()));
+            out.println("shape      : " + variables.resolveText(spec.sqlShape()));
+        }
+    }
+
+    /** md の generate: java|sql|both に従って生成を振り分ける（总体流程の統合入口）。 */
+    private void genFromMd(Map<String, String> options) throws IOException {
+        String featureName = options.get("feature");
+        if (StrUtil.isBlank(featureName)) {
+            throw new IllegalArgumentException("--feature が必要です");
+        }
+        com.walk_nie.bizgen.agent.md.FeatureSpec spec = repository.loadFeature(featureName);
+        String generate = spec.generate().isEmpty() ? "java" : spec.generate();
+        if (!"java".equals(generate) && !"sql".equals(generate) && !"both".equals(generate)) {
+            throw new IllegalArgumentException("generate は java|sql|both のいずれかです: " + generate);
+        }
+        out.println("[GEN] md=" + featureName + " generate=" + generate);
+        if ("java".equals(generate) || "both".equals(generate)) {
+            javaGen(options);
+        }
+        if ("sql".equals(generate) || "both".equals(generate)) {
+            SqlType type = SqlType.fromToken(spec.sqlType());
+            if (type == null) {
+                throw new IllegalArgumentException("SQL 生成には md の sqltype: select|update|delete が必要です");
+            }
+            Map<String, String> variables = new LinkedHashMap<String, String>(spec.variables());
+            SqlGenRequest request = new SqlGenRequest(type, spec.sqlDescription(), spec.sqlShape(),
+                    StrUtil.splitCsv(spec.tables()), spec.fields(), variables,
+                    options.get("out"), options.get("prompt"));
+            SqlGenState state = new SqlGenPipeline().run(request, context);
+            SqlGenResult result = state.result();
+            out.println("SQL 生成完了: " + result.file());
+            out.println("使用表: " + result.tableNames());
+            out.println("----- SQL -----");
+            out.println(result.sql());
+            printTraces(context);
+        }
+    }
+
     private SqlGenRequest buildSqlRequest(Map<String, String> options) {
         SqlType type = SqlType.fromToken(options.get("type"));
         if (type == null) {
@@ -710,6 +781,10 @@ public final class Cli {
             throw new IllegalArgumentException("--desc が必要です");
         }
         List<String> tables = StrUtil.splitCsv(options.get("tables"));
+        List<String> fields = new ArrayList<String>();
+        for (String field : StrUtil.splitCsv(options.get("fields"))) {
+            fields.add(field.replace("`", ""));
+        }
         Map<String, String> variables = new LinkedHashMap<String, String>();
         if (options.containsKey("var")) {
             String pair = options.get("var");
@@ -723,7 +798,7 @@ public final class Cli {
                 variables.put(entry.getKey().substring(4), entry.getValue());
             }
         }
-        return new SqlGenRequest(type, description, options.get("shape"), tables,
+        return new SqlGenRequest(type, description, options.get("shape"), tables, fields,
                 variables, options.get("out"), options.get("prompt"));
     }
 

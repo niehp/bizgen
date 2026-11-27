@@ -1,5 +1,7 @@
 ---
 title: {{classTitle}}
+# java | sql | both。md 一枚が生成の入口
+generate: java
 mode: NEW_FILE
 targetFile: {{packageName|小蛇形}}/{{className|大驼峰}}
 # 保存先は機能 md では指定しない。config/agent-config.properties の path.generatedJavaRoot で指定する。
@@ -46,6 +48,14 @@ designs:
 - 引数: {{methodArgs1}}
 - 戻り値: {{methodReturn1}}
 - 例外: {{methodThrows1}}
+1. {{methodStep1}}
+2. {{methodStep2}}
+
+## 処理フロー
+
+1. 入力値を決定論的に検証する。
+2. 既存 API を function tool で特定し、呼び出す。
+3. 新規コードと API 呼び出しを結合し、日本語コメントを付与する。
 
 ## メソッド機能の記述テンプレート（必要なものをコピーして変更する）
 

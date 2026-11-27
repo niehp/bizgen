@@ -1,5 +1,7 @@
 ---
 title: 受注検索サービスの新規作成
+# java | sql | both。md 一枚が生成の入口（省略時は java）
+generate: java
 mode: NEW_FILE
 targetFile: com/walk_nie/bizgen/sample/OrderQueryService.java
 # 保存先は config/agent-config.properties の path.generatedJavaRoot で指定する

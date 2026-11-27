@@ -5,6 +5,7 @@ import com.walk_nie.bizgen.agent.generator.flow.CodePlan;
 import com.walk_nie.bizgen.agent.generator.flow.FlowGenState;
 import com.walk_nie.bizgen.agent.generator.java.JavaGenState;
 import com.walk_nie.bizgen.agent.generator.java.ResolvedFeature;
+import com.walk_nie.bizgen.agent.md.JavaFeatureOutline;
 import com.walk_nie.bizgen.agent.llm.LlmMessage;
 import com.walk_nie.bizgen.agent.llm.LlmRequest;
 import com.walk_nie.bizgen.agent.llm.LlmResponse;
@@ -41,6 +42,12 @@ public final class PlanCodeBlocksStage implements Stage<FlowGenState, FlowGenSta
         AgentConfig config = context.config();
 
         VariableTable variables = new VariableTable();
+        JavaFeatureOutline outline = JavaFeatureOutline.parse(resolved.featureBody());
+        variables.put("featureOutline", outline.isEmpty()
+                ? "（md に Java 契約の明示なし）" : outline.toPromptText());
+        variables.put("fixedMethods", outline.methodNamesText());
+        variables.put("flowSteps", outline.flowText());
+        variables.put("maxBlocks", String.valueOf(config.maxBlocks()));
         variables.put("featureBody", resolved.featureBody());
         variables.put("designDocs", resolved.designText());
         variables.put("termsText", java.termsText());

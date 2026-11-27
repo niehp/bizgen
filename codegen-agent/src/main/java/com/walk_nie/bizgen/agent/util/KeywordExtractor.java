@@ -58,4 +58,12 @@ public final class KeywordExtractor {
         }
         return new ArrayList<String>(words);
     }
+
+    /** 文字列にキーワードが含まれるか（大小文字を無視）。 */
+    public static boolean contains(String text, String keyword) {
+        if (text == null || keyword == null || text.trim().isEmpty() || keyword.trim().isEmpty()) {
+            return false;
+        }
+        return text.toLowerCase(java.util.Locale.ROOT).contains(keyword.toLowerCase(java.util.Locale.ROOT));
+    }
 }

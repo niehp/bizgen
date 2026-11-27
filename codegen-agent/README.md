@@ -80,6 +80,8 @@ agent.maxSameCall=3                   # 同一 tool+参数重复几次就判定�
 ```
 help                                  命令列表
 config                                查看配置（API Key 已脱敏）
+gen --feature <md名>                   总体流程统一入口：按 md 的 generate: java|sql|both 分流
+plan --feature <md名>                  不调模型查看 md 契约（生成种别/Java 类方法流程/SQL 对象表与字段）
 list java|project|usecase|class|method|schema|prompt|template
 template java-class|table-schema [--out <file>]      输出 md 模板
 pipeline java|sql|feature|flow        查看流水线阶段（区分 CODE / LLM）
@@ -100,6 +102,29 @@ agent-sql --type select|update|delete --desc "..." --tables "受注,顧客"
 agent-trace                           查看最近一次 Agent 的轮次与工具调用轨迹
 exit
 ```
+
+## 总体流程（md 是唯一入口）
+
+需求写在 md 文件中；`gen --feature <md名>` 读取该 md，由 front matter 的 `generate:` 决定生成 java、sql 还是两者。代码负责分流与校验，模型只负责语义与草稿。
+
+```yaml
+---
+generate: java        # java | sql | both，省略按 java 处理
+# java 时：md 正文写包名、类、字段、方法（目的/処理内容/理由/引数/戻り値/例外）与 ## 処理フロー
+# sql 时：写下面的契约
+sqltype: select       # select | update | delete
+tables: 受注,顧客      # 对象表名（日语）
+fields:               # 对象字段（日语，表.字段 形式）
+  - 受注.受注ID
+  - 顧客.顧客名
+---
+```
+
+- Java：类名、方法名、字段名与处理顺序由代码从 md 解析为 `JavaFeatureOutline` 强类型契约并注入 prompt，模型不得改名；语义映射阶段用契约覆盖模型的推断。
+- SQL：种别、对象表、对象字段从 md 读取；送入模型前完成「表名→表结构→字段日语名→英语物理名」转换，未定义的表/字段直接报错。`tables:` 省略时会从 `fields:` 的表名前缀或 md 正文自动确定要加载的表。
+- `plan --feature <md名>` 可不调用模型检查入口是否写对；`java-gen` / `sql-gen` 仍可单独调用。
+
+示例：`md/03-usecase/sample-order-query-service.md`（java）、`sample-order-select-sql.md`（sql）、`sample-order-both.md`（both）。
 
 ## Java 生成
 
@@ -157,6 +182,7 @@ usecase md 示例见 `md/03-usecase/sample-order-query-service.md`。front matte
 ## SQL 生成
 
 - 表结构：一表一 md，见 `md/schema/受注.md`、`md/schema/顧客.md`，模板见 `md/template/table-schema.md`
+- SQL 功能 md 模板见 `md/template/sql-feature.md`；`sql-gen` 也支持 `--fields "受注.受注ID,顧客.顧客名"`
 - prompt：`md/prompt/select-sql.md`（支持多表 JOIN）、`update-sql.md`、`delete-sql.md`
 - 只把 SQL 中用到的表结构喂给模型，超过 `gen.maxTables` 直接报错，不静默截断
 -  Japanese 表名/字段名 → 查表结构 → 英语物理名，在送入模型前完成转换；prompt 与 md 中可直接使用日语
@@ -167,9 +193,9 @@ SQL 变量格式（按类型固定）：
 | --- | --- |
 | 字符型 | `/*customerName*/'xx';` |
 | 日期型 | `/*orderDate*/CURREN_DATE;` |
-| 数字型 | `/*orderId`*/9;` |
+| 数字型 | `/*orderId*/9;` |
 
-变量名取英语物理名的小驼峰。上述字面量（`CURREN_DATE`、数字型反引号）按需求原样实现，如需调整可修改 `SqlVarType` 常量。
+变量名取英语物理名的小驼峰。上述字面量（`CURREN_DATE`）按需求原样实现，如需调整可修改 `SqlVarType` 常量。
 
 ## Agent 模式（多轮 function tool）
 

@@ -21,7 +21,7 @@
 
 - `STRING` : SQL 変数は `/*小驼峰名*/'xx';`
 - `DATE`   : SQL 変数は `/*小驼峰名*/CURREN_DATE;`
-- `NUMBER` : SQL 変数は `/*小驼峰名`*/9;`
+- `NUMBER` : SQL 変数は `/*小驼峰名*/9;`
 
 ## リレーション
 

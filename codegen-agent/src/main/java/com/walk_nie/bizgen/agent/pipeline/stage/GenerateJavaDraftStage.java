@@ -5,6 +5,7 @@ import com.walk_nie.bizgen.agent.generator.java.JavaChangeIntent;
 import com.walk_nie.bizgen.agent.generator.java.JavaDraft;
 import com.walk_nie.bizgen.agent.generator.java.JavaGenState;
 import com.walk_nie.bizgen.agent.generator.java.ResolvedFeature;
+import com.walk_nie.bizgen.agent.md.JavaFeatureOutline;
 import com.walk_nie.bizgen.agent.llm.LlmMessage;
 import com.walk_nie.bizgen.agent.llm.LlmRequest;
 import com.walk_nie.bizgen.agent.llm.LlmResponse;
@@ -52,6 +53,9 @@ public final class GenerateJavaDraftStage implements Stage<JavaGenState, JavaGen
             variables.put("existingCode", existingCode.isEmpty() ? "（既存ファイルなし）" : existingCode);
             variables.put("packageName", packageName);
             variables.put("className", className);
+            JavaFeatureOutline outline = JavaFeatureOutline.parse(resolved.featureBody());
+            variables.put("featureOutline", outline.isEmpty()
+                    ? "（md に Java 契約の明示なし）" : outline.toPromptText());
             variables.put("semanticMap", state.semanticMap().toJson());
             variables.put("featureBody", resolved.featureBody());
             variables.put("designDocs", resolved.designText());

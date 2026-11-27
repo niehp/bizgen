@@ -1,5 +1,8 @@
 package com.walk_nie.bizgen.agent.md;
 
+import com.walk_nie.bizgen.agent.util.StrUtil;
+import com.walk_nie.bizgen.agent.variable.VariableTable;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -14,8 +17,9 @@ import java.util.Set;
 public final class FeatureSpec {
 
     private static final Set<String> RESERVED = new HashSet<String>(Arrays.asList(
-            "title", "mode", "targetfile", "targetmethod", "outputfile",
-            "designs", "designrefs", "variables", "sqltype", "tables", "prompt", "out"));
+            "title", "mode", "targetfile", "targetmethod", "outputfile", "generate",
+            "designs", "designrefs", "variables", "sqltype", "tables", "fields",
+            "desc", "description", "prompt", "out", "shape"));
 
     private final MdDoc doc;
     private final Map<String, String> variables;
@@ -83,5 +87,51 @@ public final class FeatureSpec {
 
     public String outputFile() {
         return outputFile;
+    }
+
+    /** java / sql / both。省略時は java とみなす（总体流程の入口）。 */
+    public String generate() {
+        return doc.stringValue("generate", "").trim().toLowerCase(java.util.Locale.ROOT);
+    }
+
+    /** SQL 種別（select / update / delete）。 */
+    public String sqlType() {
+        return doc.stringValue("sqltype", "").trim();
+    }
+
+    /** 日本語の対象表名（カンマ区切り）。 */
+    public String tables() {
+        return doc.stringValue("tables", "").trim();
+    }
+
+    /** SQL の対象フィールド（日本語名 / 表.フィールド名）。list 形式と CSV の両方を受け付ける。 */
+    public List<String> fields() {
+        List<String> result = new ArrayList<String>();
+        for (String entry : doc.listValue("fields")) {
+            result.addAll(StrUtil.splitCsv(entry.replace("`", "")));
+        }
+        return result;
+    }
+
+    /** Java のクラス／メソッド／処理フローを本文から型付きで取り出す（変数展開済み）。 */
+    public JavaFeatureOutline javaOutline() {
+        VariableTable table = new VariableTable();
+        table.putAll(variables);
+        return JavaFeatureOutline.parse(table.resolveText(body()));
+    }
+
+    /** SQL 生成の説明。無ければ md 本文の先頭 400 文字を使う。 */
+    public String sqlDescription() {
+        String value = doc.stringValue("desc", doc.stringValue("description", ""));
+        if (!value.trim().isEmpty()) {
+            return value.trim();
+        }
+        String body = body().trim();
+        return body.length() <= 400 ? body : body.substring(0, 400);
+    }
+
+    /** SQL 雛形（省略可）。 */
+    public String sqlShape() {
+        return doc.stringValue("shape", "").trim();
     }
 }

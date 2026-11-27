@@ -7,6 +7,9 @@
 ## 使用可能な表構造（使用する表のみを上限 {{maxTables}} 件まで提示）
 {{tableContext}}
 
+## 対象フィールド（md で指定。日本語 → 英語物理名は変換済み。指定のない列は使わない）
+{{fieldsContext}}
+
 ## SQL 雛形
 {{sqlShape}}
 

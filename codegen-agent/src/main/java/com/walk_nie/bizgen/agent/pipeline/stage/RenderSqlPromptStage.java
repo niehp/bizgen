@@ -34,6 +34,7 @@ public final class RenderSqlPromptStage implements Stage<SqlGenState, SqlGenStat
         variables.put("description", state.dictionary().resolveText(request.description()));
         variables.put("sqlShape", state.dictionary().resolveText(request.sqlShape()));
         variables.put("tableContext", state.dictionary().contextText());
+        variables.put("fieldsContext", state.dictionary().fieldContext(request.fields()));
         variables.put("sqlVariables", state.dictionary().variableText());
         variables.put("maxTables", String.valueOf(context.config().maxTables()));
         for (Map.Entry<String, String> entry : request.variables().entrySet()) {

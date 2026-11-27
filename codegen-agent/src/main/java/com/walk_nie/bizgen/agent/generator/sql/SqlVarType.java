@@ -5,7 +5,7 @@ public enum SqlVarType {
 
     STRING("/*{name}*/'xx';"),
     DATE("/*{name}*/CURREN_DATE;"),
-    NUMBER("/*{name}`*/9;");
+    NUMBER("/*{name}*/9;");
 
     private final String template;
 
