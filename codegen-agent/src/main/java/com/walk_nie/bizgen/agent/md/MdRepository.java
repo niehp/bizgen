@@ -12,6 +12,7 @@ import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -50,8 +51,13 @@ public final class MdRepository {
 
     /** 機能 md を読み込む。 */
     public FeatureSpec loadFeature(String name) throws IOException {
+        return loadFeature(name, null);
+    }
+
+    /** 機能 md を読み込み、front matter の変数を baseVariables から解決する。 */
+    public FeatureSpec loadFeature(String name, Map<String, String> baseVariables) throws IOException {
         Path path = resolve(levelDir(DesignLevel.USECASE), name);
-        return new FeatureSpec(MdDoc.parse(path, DesignLevel.USECASE));
+        return new FeatureSpec(MdDoc.parse(path, DesignLevel.USECASE), baseVariables);
     }
 
     /** 任意レベルの設計 md を読み込む。 */

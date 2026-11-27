@@ -4,25 +4,18 @@ import com.walk_nie.bizgen.agent.util.StrUtil;
 import com.walk_nie.bizgen.agent.variable.VariableTable;
 
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * 機能 md を型付きにしたもの。変数定義・設計参照・生成モード・対象ファイルを保持する。
  */
 public final class FeatureSpec {
 
-    private static final Set<String> RESERVED = new HashSet<String>(Arrays.asList(
-            "title", "mode", "targetfile", "targetmethod", "outputfile", "generate",
-            "designs", "designrefs", "variables", "sqltype", "tables", "fields",
-            "desc", "description", "prompt", "out", "shape"));
-
     private final MdDoc doc;
     private final Map<String, String> variables;
+    private final List<String> unresolvedFrontMatter;
     private final List<DesignRef> designRefs;
     private final String mode;
     private final String targetFile;
@@ -30,26 +23,34 @@ public final class FeatureSpec {
     private final String outputFile;
 
     public FeatureSpec(MdDoc doc) {
-        this.doc = doc;
+        this(doc, null);
+    }
+
+    /** baseVariables を初期値として front matter を定義順に多ラウンド解決する。 */
+    public FeatureSpec(MdDoc doc, Map<String, String> baseVariables) {
+        FrontMatterResolver.Resolution resolution = FrontMatterResolver.resolve(
+                doc.frontMatter(), baseVariables);
+        this.doc = new MdDoc(doc.path(), doc.level(), resolution.values(), doc.body());
         Map<String, String> vars = new LinkedHashMap<String, String>();
-        for (Map.Entry<String, Object> entry : doc.frontMatter().entrySet()) {
-            if (!RESERVED.contains(entry.getKey().toLowerCase())) {
+        for (Map.Entry<String, Object> entry : resolution.values().entrySet()) {
+            if (!FrontMatterResolver.isReserved(entry.getKey())) {
                 vars.put(entry.getKey(), String.valueOf(entry.getValue()));
             }
         }
         this.variables = vars;
+        this.unresolvedFrontMatter = resolution.unresolved();
         List<DesignRef> refs = new ArrayList<DesignRef>();
-        for (String token : doc.listValue("designs")) {
+        for (String token : this.doc.listValue("designs")) {
             refs.add(DesignRef.parse(token));
         }
-        for (String token : doc.listValue("designRefs")) {
+        for (String token : this.doc.listValue("designRefs")) {
             refs.add(DesignRef.parse(token));
         }
         this.designRefs = refs;
-        this.mode = doc.stringValue("mode", "");
-        this.targetFile = doc.stringValue("targetFile", "");
-        this.targetMethod = doc.stringValue("targetMethod", "");
-        this.outputFile = doc.stringValue("outputFile", "");
+        this.mode = this.doc.stringValue("mode", "");
+        this.targetFile = this.doc.stringValue("targetFile", "");
+        this.targetMethod = this.doc.stringValue("targetMethod", "");
+        this.outputFile = this.doc.stringValue("outputFile", "");
     }
 
     public MdDoc doc() {
@@ -66,6 +67,11 @@ public final class FeatureSpec {
 
     public Map<String, String> variables() {
         return variables;
+    }
+
+    /** front matter に残った未定義／循環参照のプレースホルダ式。 */
+    public List<String> unresolvedFrontMatter() {
+        return unresolvedFrontMatter;
     }
 
     public List<DesignRef> designRefs() {

@@ -3,6 +3,8 @@ package com.walk_nie.bizgen.agent.generator.java;
 import com.walk_nie.bizgen.agent.api.ApiCatalog;
 import com.walk_nie.bizgen.agent.md.FeatureSpec;
 import com.walk_nie.bizgen.agent.md.MdDoc;
+import com.walk_nie.bizgen.agent.semantic.SemanticRetrievalResult;
+import com.walk_nie.bizgen.agent.semantic.SemanticSearchIntent;
 import com.walk_nie.bizgen.agent.term.TermDictionary;
 
 import java.util.ArrayList;
@@ -43,6 +45,9 @@ public final class JavaGenState {
     private String termsText = "";
     private List<ApiCatalog.ApiEntry> apis = new ArrayList<ApiCatalog.ApiEntry>();
     private String apisText = "";
+    /** モデルが意味解析して立てた検索意図と、その意図でコード側が検索した結果。 */
+    private SemanticSearchIntent semanticIntent;
+    private SemanticRetrievalResult semanticRetrieval;
     private String specText = "";
     private com.walk_nie.bizgen.agent.spec.SpecCatalog specCatalog;
     private JavaDraft draft;
@@ -151,6 +156,24 @@ public final class JavaGenState {
 
     public void setApisText(String apisText) {
         this.apisText = apisText == null ? "" : apisText;
+    }
+
+    /** モデルによる意味解析の検索意図（無い場合は null）。 */
+    public SemanticSearchIntent semanticIntent() {
+        return semanticIntent;
+    }
+
+    public void setSemanticIntent(SemanticSearchIntent semanticIntent) {
+        this.semanticIntent = semanticIntent;
+    }
+
+    /** 意味解析の意図に従ってコード側が検索した本物の結果（無い場合は null）。 */
+    public SemanticRetrievalResult semanticRetrieval() {
+        return semanticRetrieval;
+    }
+
+    public void setSemanticRetrieval(SemanticRetrievalResult semanticRetrieval) {
+        this.semanticRetrieval = semanticRetrieval;
     }
 
     /** 展開済みの spec 資料（api/dict/template/example）を 1 つの prompt Text として返す。 */

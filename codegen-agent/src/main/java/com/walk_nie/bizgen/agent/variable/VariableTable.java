@@ -38,6 +38,12 @@ public final class VariableTable {
         }
     }
 
+    /** 内容を新しい表で丸ごと差し替える。別機能の実行時に古い変数が残らないようにする。 */
+    public void replaceAll(Map<String, ?> source) {
+        values.clear();
+        putAll(source);
+    }
+
     public boolean contains(String name) {
         return values.containsKey(normalize(name));
     }

@@ -11,6 +11,10 @@ import com.walk_nie.bizgen.agent.llm.LlmRequest;
 import com.walk_nie.bizgen.agent.llm.LlmResponse;
 import com.walk_nie.bizgen.agent.pipeline.PipelineContext;
 import com.walk_nie.bizgen.agent.pipeline.Stage;
+import com.walk_nie.bizgen.agent.reuse.ReuseResolver;
+import com.walk_nie.bizgen.agent.reuse.ReuseSelection;
+import com.walk_nie.bizgen.agent.reuse.ReuseVerifier;
+import com.walk_nie.bizgen.agent.util.JavaCodeExtractor;
 import com.walk_nie.bizgen.agent.util.StrUtil;
 import com.walk_nie.bizgen.agent.variable.VariableTable;
 
@@ -54,6 +58,7 @@ public final class CombinePolishStage implements Stage<FlowGenState, FlowGenStat
         variables.put("apisText", java.apisText());
         variables.put("specText", java.specText());
         variables.put("intent", java.intent().intent().name());
+        variables.put("fixedFragments", ReuseResolver.promptText(state.reuseSelections()));
 
         try {
             String prompt = variables.resolveText(context.repository().prompt("combine-polish"));
@@ -65,6 +70,18 @@ public final class CombinePolishStage implements Stage<FlowGenState, FlowGenStat
             JavaDraft draft = com.walk_nie.bizgen.agent.pipeline.stage.GenerateJavaDraftStage
                     .parseDraftText(response.content(), packageName,
                             resolved.variable("packageComment", resolved.spec().title()));
+
+            // コード側で確定したフラグメントは一字も変えさせない。欠落していれば結合失敗として停止する。
+            if (!state.reuseSelections().isEmpty()) {
+                String extracted = JavaCodeExtractor.extract(draft.classCode());
+                java.util.List<String> missing = ReuseVerifier.missing(
+                        extracted, state.reuseSelections());
+                if (!missing.isEmpty()) {
+                    throw new IllegalStateException(
+                            "再利用テンプレートが結合結果に含まれていません: " + missing
+                                    + "。モデルに固定フラグメントの変更を許可していないか確認してください。");
+                }
+            }
             java.setDraft(draft);
             // 結合ステージ自体が大模型による潤色を兼ねるため、DRAFTED を飛ばして POLISHED へ。
             java.advance(JavaGenState.Phase.POLISHED);

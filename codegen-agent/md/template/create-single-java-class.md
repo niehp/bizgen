@@ -3,10 +3,37 @@ title: {{classTitle}}
 # java | sql | both。md 一枚が生成の入口
 generate: java
 mode: NEW_FILE
-targetFile: {{packageName|小蛇形}}/{{className|大驼峰}}
+targetFile: {{packagePath}}/{{className}}
 # 保存先は機能 md では指定しない。config/agent-config.properties の path.generatedJavaRoot で指定する。
-applicationId: {{applicationId}}
-entityName: {{entityName}}
+
+# ↓ ここで定義した変数が front matter 自身と本文の両方で使える（定義順に多ラウンドで解決）
+classTitle: 受注検索サービスの新規作成
+applicationId: order
+entityName: Order
+classKind: Service
+packageName: com.walk_nie.bizgen.sample
+packagePath: com/walk_nie/bizgen/sample
+packageComment: 受注検索に関するアプリケーションサービスを提供する。
+className: {{entityName|大驼峰}}QueryService
+classComment: 受注の検索ユースケースを調整する。検索条件の検証と結果の整形を担当する。
+
+fieldName1: orderRepository
+fieldType1: OrderRepository
+fieldComment1: 受注の永続化アクセス。検索処理を永続化層へ委譲する。
+fieldName2: orderMapper
+fieldType2: OrderMapper
+fieldComment2: 受注と SQL の変換を担当する。SQL 生成結果との対応を保つ。
+
+methodName1: findByOrderId
+methodPurpose1: 受注IDから受注を1件取得する。
+methodBehavior1: 受注IDの必須チェックを行い、リポジトリを呼び出して結果を返す。
+methodReason1: 不正なIDでの検索を生成側で防ぎ、不要な DB アクセスを削減する。
+methodArgs1: String orderId
+methodReturn1: Optional<Order>
+methodThrows1: IllegalArgumentException 受注IDが未設定の場合
+methodStep1: 受注IDが空でないことを検証する。
+methodStep2: リポジトリを呼び出し、結果をそのまま返す。
+
 designs:
   - java-common/naming-convention
   - java-common/javadoc-convention
@@ -16,13 +43,13 @@ designs:
 # {{classTitle}}
 
 > このファイルは「Java ファイルを 1 つ新規作成する」ための機能 md テンプレートです。
-> `{{...}}` は変数です。喂给大模型之前すべて置換されます。
+> 波括弧 2 つで囲んだ記法は変数です。front matter の定義順に解決され、喂给大模型之前すべて置換されます。
 > クラス名・メソッド名・パッケージ名は命名スタイル指定で自動変換できます。
 
 ## パッケージ情報
 
 - パッケージ名: `{{packageName}}`
-- パッケージ名(大蛇形): `{{packageName|大蛇形}}`
+- パッケージパス: `{{packagePath}}`
 - パッケージコメント: {{packageComment}}
 
 ## クラス情報

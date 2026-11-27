@@ -1,6 +1,8 @@
 package com.walk_nie.bizgen.agent.generator.flow;
 
 import com.walk_nie.bizgen.agent.generator.java.JavaGenState;
+import com.walk_nie.bizgen.agent.reuse.ReuseSelection;
+import com.walk_nie.bizgen.agent.semantic.SemanticSearchIntent;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -15,6 +17,7 @@ public final class FlowGenState {
     public enum Phase {
         BASE_READY,
         PLANNED,
+        REUSED,
         BLOCKS_RESOLVED,
         COMBINED
     }
@@ -23,6 +26,9 @@ public final class FlowGenState {
     private Phase phase = Phase.BASE_READY;
     private CodePlan plan;
     private final List<String> toolResolvedApis = new ArrayList<String>();
+    private final List<ReuseSelection> reuseSelections = new ArrayList<ReuseSelection>();
+    /** モデルがブロックごとに自ら立てた意味解析の検索意図（人工レビュー用）。 */
+    private final List<SemanticSearchIntent> semanticSearches = new ArrayList<SemanticSearchIntent>();
     private int blockRounds;
 
     public FlowGenState(JavaGenState java) {
@@ -64,6 +70,28 @@ public final class FlowGenState {
 
     public List<String> toolResolvedApis() {
         return Collections.unmodifiableList(toolResolvedApis);
+    }
+
+    /** コード側で確定した再利用テンプレート（人工レビュー用）。 */
+    public void recordReuse(ReuseSelection selection) {
+        if (selection != null) {
+            reuseSelections.add(selection);
+        }
+    }
+
+    public List<ReuseSelection> reuseSelections() {
+        return Collections.unmodifiableList(reuseSelections);
+    }
+
+    /** モデルが semantic_search ツールで自ら発行した検索意図を記録する。 */
+    public void recordSemanticSearch(SemanticSearchIntent intent) {
+        if (intent != null) {
+            semanticSearches.add(intent);
+        }
+    }
+
+    public List<SemanticSearchIntent> semanticSearches() {
+        return Collections.unmodifiableList(semanticSearches);
     }
 
     public void countBlockRound() {

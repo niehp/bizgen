@@ -4,6 +4,8 @@ import com.walk_nie.bizgen.agent.api.ApiCatalog;
 import com.walk_nie.bizgen.agent.config.AgentConfig;
 import com.walk_nie.bizgen.agent.llm.LlmClient;
 import com.walk_nie.bizgen.agent.md.MdRepository;
+import com.walk_nie.bizgen.agent.reuse.ReuseSelection;
+import com.walk_nie.bizgen.agent.semantic.SemanticSearchIntent;
 import com.walk_nie.bizgen.agent.variable.VariableTable;
 
 import java.util.ArrayList;
@@ -21,6 +23,9 @@ public final class AgentContext {
     private final LlmClient llm;
     private final Set<String> selectedApiKeys = new LinkedHashSet<String>();
     private final List<ApiCatalog.ApiEntry> selectedApis = new ArrayList<ApiCatalog.ApiEntry>();
+    private final List<ReuseSelection> selectedReuses = new ArrayList<ReuseSelection>();
+    /** モデルが semantic_search で自ら立てた意味解析の検索意図（監査用）。 */
+    private final List<SemanticSearchIntent> semanticSearches = new ArrayList<SemanticSearchIntent>();
     /** 編集提案のうち、人間だけに見せる承認トークンを含む表示文。モデルへは渡さない。 */
     private String lastProposalForHuman = "";
 
@@ -62,6 +67,28 @@ public final class AgentContext {
 
     public List<ApiCatalog.ApiEntry> selectedApis() {
         return Collections.unmodifiableList(selectedApis);
+    }
+
+    /** ツールで確定した再利用テンプレートを記録する（監査・最終検証用）。 */
+    public void recordReuse(ReuseSelection selection) {
+        if (selection != null) {
+            selectedReuses.add(selection);
+        }
+    }
+
+    public List<ReuseSelection> selectedReuses() {
+        return Collections.unmodifiableList(selectedReuses);
+    }
+
+    /** モデルが意味解析して自ら発行した検索意図を記録する（人工レビュー用）。 */
+    public void recordSemanticSearch(SemanticSearchIntent intent) {
+        if (intent != null) {
+            semanticSearches.add(intent);
+        }
+    }
+
+    public List<SemanticSearchIntent> semanticSearches() {
+        return Collections.unmodifiableList(semanticSearches);
     }
 
     /** 編集提案を人間向け表示として記録する（LLM への tool 結果には含めない）。 */

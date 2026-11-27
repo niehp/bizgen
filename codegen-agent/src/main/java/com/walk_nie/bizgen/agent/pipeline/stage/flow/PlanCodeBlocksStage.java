@@ -11,6 +11,7 @@ import com.walk_nie.bizgen.agent.llm.LlmRequest;
 import com.walk_nie.bizgen.agent.llm.LlmResponse;
 import com.walk_nie.bizgen.agent.pipeline.PipelineContext;
 import com.walk_nie.bizgen.agent.pipeline.Stage;
+import com.walk_nie.bizgen.agent.reuse.ReuseResolver;
 import com.walk_nie.bizgen.agent.util.StrUtil;
 import com.walk_nie.bizgen.agent.variable.VariableTable;
 
@@ -56,6 +57,13 @@ public final class PlanCodeBlocksStage implements Stage<FlowGenState, FlowGenSta
         variables.put("specText", java.specText());
         variables.put("semanticMap", java.semanticMap().toJson());
         variables.put("className", java.semanticMap().className());
+        try {
+            variables.put("reusableHints", ReuseResolver.hintsText(
+                    new ReuseResolver(config).catalog()));
+        } catch (IOException e) {
+            throw new IllegalStateException("再利用テンプレートの読み込みに失敗: "
+                    + config.blockRoot(), e);
+        }
 
         try {
             String prompt = variables.resolveText(context.repository().prompt("code-plan"));

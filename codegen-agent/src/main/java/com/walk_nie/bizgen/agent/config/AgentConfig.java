@@ -40,6 +40,10 @@ public final class AgentConfig {
     private final int templateFillMaxFiles;
     private final Path specRoot;
     private final int specMaxChars;
+    private final Path blockRoot;
+    private final boolean reuseEnabled;
+    private final int reuseMinScore;
+    private final int reuseTopN;
 
     private final int maxTables;
     private final int maxSimilarFiles;
@@ -55,6 +59,11 @@ public final class AgentConfig {
     private final boolean selfCorrect;
     private final int maxBlocks;
     private final int maxAutoDesigns;
+
+    /** 意味解析による検索意図の有効/無効・上限・prompt 名。 */
+    private final boolean semanticRetrievalEnabled;
+    private final int semanticMaxQueries;
+    private final String semanticRetrievalPrompt;
 
     private final Path javaIndexRoot;
     private final Path javaIndexDb;
@@ -106,6 +115,12 @@ public final class AgentConfig {
         this.templateFillMaxFiles = Integer.parseInt(value(properties, "templateFill.maxFiles", "50"));
         this.specRoot = java.nio.file.Paths.get(value(properties, "path.specRoot", "spec"));
         this.specMaxChars = Integer.parseInt(value(properties, "spec.maxChars", "24000"));
+        String blockRootValue = value(properties, "path.blockRoot", "spec/block").trim();
+        this.blockRoot = blockRootValue.isEmpty()
+                ? this.specRoot.resolve("block") : java.nio.file.Paths.get(blockRootValue);
+        this.reuseEnabled = Boolean.parseBoolean(value(properties, "reuse.enabled", "true"));
+        this.reuseMinScore = Integer.parseInt(value(properties, "reuse.minScore", "5"));
+        this.reuseTopN = Integer.parseInt(value(properties, "reuse.topN", "5"));
 
         this.maxTables = Integer.parseInt(value(properties, "gen.maxTables", "5"));
         this.maxSimilarFiles = Integer.parseInt(value(properties, "gen.maxSimilarFiles", "5"));
@@ -122,6 +137,13 @@ public final class AgentConfig {
         this.maxBlocks = Integer.parseInt(value(properties, "gen.maxBlocks", "12"));
         this.maxAutoDesigns = Math.max(0,
                 Integer.parseInt(value(properties, "gen.maxAutoDesigns", "6")));
+
+        this.semanticRetrievalEnabled = Boolean.parseBoolean(
+                value(properties, "semanticRetrieval.enabled", "true"));
+        this.semanticMaxQueries = Math.max(1,
+                Integer.parseInt(value(properties, "semanticRetrieval.maxQueries", "8")));
+        this.semanticRetrievalPrompt = value(properties,
+                "semanticRetrieval.prompt", "semantic-retrieval");
 
         String indexRoot = value(properties, "path.javaIndexRoot", "").trim();
         this.javaIndexRoot = indexRoot.isEmpty() ? null : java.nio.file.Paths.get(indexRoot);
@@ -275,8 +297,43 @@ public final class AgentConfig {
         return specMaxChars;
     }
 
+    /** 再利用可能なコード片 / API 呼び出しテンプレートのルート。 */
+    public Path blockRoot() {
+        return blockRoot;
+    }
+
+    /** 再利用機能の有効 / 無効。 */
+    public boolean reuseEnabled() {
+        return reuseEnabled;
+    }
+
+    /** 再利用ブロックを採用する最低スコア。これ未満はモデル生成に任せる。 */
+    public int reuseMinScore() {
+        return reuseMinScore;
+    }
+
+    /** 一度に候補として返す再利用ブロックの最大件数。 */
+    public int reuseTopN() {
+        return reuseTopN;
+    }
+
     public int apiTopN() {
         return apiTopN;
+    }
+
+    /** 意味解析フェーズ（モデルが検索意図を立てる）を有効にするか。 */
+    public boolean semanticRetrievalEnabled() {
+        return semanticRetrievalEnabled;
+    }
+
+    /** 1 回の意味解析で許す検索意図の最大件数。 */
+    public int semanticMaxQueries() {
+        return semanticMaxQueries;
+    }
+
+    /** 意味解析に使う prompt 名（md/prompt 配下）。 */
+    public String semanticRetrievalPrompt() {
+        return semanticRetrievalPrompt;
     }
 
     public boolean selfCorrect() {
@@ -401,6 +458,9 @@ public final class AgentConfig {
                 + ", sameCall=" + agentMaxSameCall + "\n"
                 + "featureGen: apiTopN=" + apiTopN + ", selfCorrect=" + selfCorrect
                 + ", maxBlocks=" + maxBlocks + ", maxAutoDesigns=" + maxAutoDesigns + "\n"
+                + "semanticRetrieval: enabled=" + semanticRetrievalEnabled
+                + ", maxQueries=" + semanticMaxQueries
+                + ", prompt=" + semanticRetrievalPrompt + "\n"
                 + "javaIndex: root=" + (javaIndexRoot == null ? "(未設定)"
                         : javaIndexRoot.toAbsolutePath().normalize())
                 + ", db=" + javaIndexDb.toAbsolutePath().normalize()

@@ -93,6 +93,7 @@ tools                                 查看已注册的 function tools 与上�
 terms                                 查看术语库
 api-list                              查看 API 库
 spec-list                             查看 spec/api・dict・template・example 四类参考资料
+reuse-list                            查看可复用代码块/API 模板（spec/block，不调模型）
 java-gen --feature <md名>             13 阶段 Java 生成框架（含术语/API/spec/自检，不经过 Agent 循环）
 flow-gen --feature <md名>             6 步流程：功能块分解 → API 走 tool / 其余新作 → 循环 → 结合润色
 sql-gen --type select|update|delete --desc "..." --tables "受注,顧客"
@@ -134,7 +135,7 @@ usecase md 示例见 `md/03-usecase/sample-order-query-service.md`。front matte
 - `targetFile:`：既有项目相对路径
 - `targetMethod:`：`MODIFY_METHOD` 的目标方法名；生成代码里必须含同名方法，否则直接报错交人工审核，不会退化为改写第一个方法
 - `designs:`：设计文档引用，如 `java-common/naming-convention`（显式引用始终加载）
-- 其余 key 自动作为变量
+- 其余 key 自动作为变量；**front matter 自身也能用变量**（见下节）
 - **保存路径不在 MD 中指定**，统一由配置文件 `path.generatedJavaRoot` 决定
 
 五级设计目录（`md/01-java-common` ~ `md/05-method`）**不再全量加载**：先加载 `designs:` 显式引用，再按功能 MD 正文的日语/英语关键词自动匹配，最多追加 `gen.maxAutoDesigns=6` 份（设为 0 可关闭）。加载顺序固定为「相关度降序 → 级别升序 → 路径升序」，变量在送入模型前统一展开。
@@ -178,6 +179,19 @@ usecase md 示例见 `md/03-usecase/sample-order-query-service.md`。front matte
 | 小蛇形 / LOWER_SNAKE | `application_id` |
 
 未定义变量保持原样，不会被静默替换为空。
+
+**front matter 里的变量**：`title:`、`targetFile:`、`generate:`、`sqltype:`、`tables:`、`fields:` 等保留字段的值也会替换，且替换发生在阅读 md 时（不依赖流水线）。按 front matter 的书写顺序迭代多轮（最多 8 轮），因此后定义的变量也能被前面的字段引用；命令行 `--var` 作为初始值，md 中的定义优先。例如：
+
+```yaml
+title: {{classTitle}}
+targetFile: {{packagePath}}/{{className}}
+classTitle: 受注検索サービスの新規作成
+packagePath: com/walk_nie/bizgen/sample
+entityName: Order
+className: {{entityName|大驼峰}}QueryService
+```
+
+解析结果：`title=受注検索サービスの新規作成`、`targetFile=com/walk_nie/bizgen/sample/OrderQueryService`。未定义变量或循环引用会保留 `{{...}}` 原文，`plan --feature` 会打印 `[WARN] 未解決の front matter 変数`。设计 md 的 front matter 同样参与变量展开。
 
 ## SQL 生成
 
@@ -300,6 +314,58 @@ pipeline flow        # 14 ステージの順番を表示
 spec-list   # 4 類の資料一覧（LLM 不使用）
 ```
 
+## コード片 / API 呼び出しテンプレートの再利用（flow-gen / agent-gen 共通）
+
+「似たコードを参考にする」だけではなく、**登録済みのテンプレートをコード側で選び、変数を展開し、そのまま生成結果に埋め込む**仕組み。`spec/example` はあくまで書き方の参考であり、ここで扱うテンプレートは「一字も変更してはいけない確定値」が違い。
+
+### テンプレートの書き方（`spec/block/*.md`、1 ファイル = 1 ブロック）
+
+````markdown
+# ブロック: require-non-blank
+
+- kind: API_CALL                # API_CALL | CODE
+- description: 引数が空でないことを検証し、未設定なら例外を投げる
+- keywords: 必須チェック, 引数検証, requireNonBlank
+- api: `public static void requireNonBlank(String value, String name)`   # API_CALL は必須
+- vars: value=orderId, name="orderId"   # 変数の既定値。機能 md の変数が優先
+
+```java
+Validate.requireNonBlank({{value}}, {{name}});
+```
+````
+
+- キーは日本語 (`種別 / 説明 / キーワード / 変数`) でも読める。コード部分は最初の ` ```java ` ブロックのみ。
+- `{{変数}}` は機能 md の front matter 変数 → テンプレート既定値の順で展開する。未解決のプレースホルダが残るテンプレートは**採用しない**。
+- `API_CALL` は `api:` のシグネチャが `path.apiRoot`（既定 `md/api`）に実在しなければ採用しない。モデルに存在しない API を書かせないための白名单。
+- 一致はキーワード一致のみ（埋め込み・外部 API 不使用）。同点なら id の辞書順で安定ソートする。
+
+設定: `path.blockRoot=spec/block`、`reuse.enabled=true`、`reuse.minScore=5`、`reuse.topN=5`。
+
+### flow-gen での流れ（LLM なしで確定）
+
+1. `flow-01-plan-blocks` が機能ブロックを分解するとき、`{{reusableHints}}` にテンプレート一覧を渡す（採用判断はしない）。
+2. 新しい `flow-01a-reuse-blocks` がブロックごとにテンプレートを検索し、採用できれば **モデルを呼ばずに** `Block.markDone()` する。API_CALL は確認済み API として監査記録にも残る。
+3. 残ったブロックだけが `find_api` / 新規生成の対象。
+4. `combine-polish.md` に「固定フラグメント」として注入し、結合後に **コード側で一字も変わっていないか検証**する。欠落していれば生成を失敗させ、黙って直さない。
+
+### agent-gen での流れ（function tool）
+
+| tool | 役割 |
+| --- | --- |
+| `find_reusable_block` | `spec/block` から候補を決定論的に検索。id・種別・説明・確認済み API・必要変数を返す |
+| `apply_block_template` | id と `variables` を受け取り、**コード側で**変数展開して確定コードを返す。同時に `AgentContext` へ記録 |
+
+モデルは `find_reusable_block` → `apply_block_template` の順で呼び、返ったコードを変更せず最終回答に入れる。最終回答の草稿に対し `ReuseVerifier` が全フラグメントの包含を検証し、1 つでも欠けていればエラー（人間レビューに回す）。`agent-java.md` と `agent-gen` の user prompt にこの順序と禁止事項を明記している。
+
+```
+reuse-list                                   # テンプレート一覧（LLM 不使用）
+flow-gen --feature sample-order-query-service
+agent-gen --feature sample-order-query-service
+```
+
+サンプル: `spec/block/require-non-blank.md`（API_CALL）、`spec/block/find-order-by-id.md`（API_CALL）、`spec/block/empty-optional.md`（CODE）。
+`reuse.enabled=false` にすれば両方の経路で旧挙動（参考としてのみ注入）に戻せる。
+
 ## 5 ステップ Feature Pipeline（feature-gen）
 
 `feature-gen --feature <md名>` は、機能描写 MD を入力に次の 5 ステージを固定順で実行する。
@@ -344,8 +410,8 @@ prompt テンプレートは `md/prompt/feature-codegen.md` と `md/prompt/featu
 `template` コマンドが「空のテンプレートを人手で書き始めるためのコピー」だったのに対し、`template-fill` は**テンプレートを LLM に 1 ファイルずつ渡して空欄を埋めさせる**機能です。
 
 - 入力: `path.templateFillRoot` 配下の**すべてのファイルを再帰的に**列挙（拡張子問わず、パス順に処理、`templateFill.maxFiles` 件まで）
-- 填充: 各ファイルの `{{...}}` を検出し、`md/prompt/template-fill.md` で「テンプレート本文 + プレースホルダ一覧 + 参照情報」を渡して LLM に生成させる
-- 参照情報: `--feature <md名>` で機能描写 md を展開して渡す。`--var key=value` / `--var.key=value` で追加変数も渡せる
+- 填充: 各ファイルの `{{...}}` を検出し、front matter／`--var` で既知の変数は**コード側で確定置換**した上で、`md/prompt/template-fill.md` に「置換済みテンプレート + 元のプレースホルダ一覧 + 参照情報」を渡して残りの空欄を LLM に埋めさせる
+- 参照情報: `--feature <md名>` で機能描写 md を展開して渡す。front matter の全キー（title / targetFile 等も含む）が変数として利用可能。`--var key=value` / `--var.key=value` で追加変数も渡せ、組み込みの `templatePath` 等より優先される
 - 出力: `path.templateFillOutputRoot` 配下に**元の相対ディレクトリ構造を維持**して UTF-8 で書き出す（既存ファイルは上書き）
 - 安全策: 出力先を入力ルート配下に置くことは禁止。填充後にプレースホルダが残っていれば `[WARN]` で表示するが、自動再試行はしない
 

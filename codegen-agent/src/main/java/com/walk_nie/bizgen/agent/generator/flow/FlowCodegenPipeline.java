@@ -2,6 +2,7 @@ package com.walk_nie.bizgen.agent.generator.flow;
 
 import com.walk_nie.bizgen.agent.generator.java.JavaGenState;
 import com.walk_nie.bizgen.agent.pipeline.PipelineContext;
+import com.walk_nie.bizgen.agent.pipeline.stage.AnalyzeSemanticsStage;
 import com.walk_nie.bizgen.agent.pipeline.stage.ClassifyIntentStage;
 import com.walk_nie.bizgen.agent.pipeline.stage.ExtractTermsStage;
 import com.walk_nie.bizgen.agent.pipeline.stage.LoadDesignStage;
@@ -15,6 +16,7 @@ import com.walk_nie.bizgen.agent.pipeline.stage.ValidateCorrectDraftStage;
 import com.walk_nie.bizgen.agent.pipeline.stage.ValidateWriteStage;
 import com.walk_nie.bizgen.agent.pipeline.stage.flow.CombinePolishStage;
 import com.walk_nie.bizgen.agent.pipeline.stage.flow.PlanCodeBlocksStage;
+import com.walk_nie.bizgen.agent.pipeline.stage.flow.ReuseBlocksStage;
 import com.walk_nie.bizgen.agent.pipeline.stage.flow.ResolveBlocksStage;
 
 import java.util.ArrayList;
@@ -38,11 +40,13 @@ public final class FlowCodegenPipeline {
                 "03-resolve-variables",
                 "03b-load-spec",
                 "04-extract-terms",
+                "04b-semantic-retrieval",
                 "05-match-apis",
                 "06-classify-intent",
                 "07-semantic-mapping",
                 "08-search-existing-code",
                 "flow-01-plan-blocks",
+                "flow-01a-reuse-blocks",
                 "flow-02-resolve-blocks",
                 "flow-03-combine-polish",
                 "11-validate-correct",
@@ -77,6 +81,7 @@ public final class FlowCodegenPipeline {
         new ResolveVariablesStage().execute(java, context);
         new LoadSpecStage().execute(java, context);
         new ExtractTermsStage().execute(java, context);
+        new com.walk_nie.bizgen.agent.pipeline.stage.AnalyzeSemanticsStage().execute(java, context);
         new MatchApiCatalogStage().execute(java, context);
         new ClassifyIntentStage().execute(java, context);
         new SemanticMapStage().execute(java, context);
@@ -85,6 +90,7 @@ public final class FlowCodegenPipeline {
         // --- 機能ブロックのループ（ステップ 3〜6）---
         FlowGenState flow = new FlowGenState(java);
         new PlanCodeBlocksStage().execute(flow, context);
+        new ReuseBlocksStage().execute(flow, context);
         new ResolveBlocksStage().execute(flow, context);
         new CombinePolishStage().execute(flow, context);
 

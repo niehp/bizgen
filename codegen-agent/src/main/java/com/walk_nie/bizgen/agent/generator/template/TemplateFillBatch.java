@@ -28,6 +28,25 @@ import java.util.stream.Stream;
  */
 public final class TemplateFillBatch {
 
+    /** 機能 md から組み立てた参照情報と、そこで解決済みの変数表。 */
+    private static final class Context {
+        private final String text;
+        private final VariableTable variables;
+
+        Context(String text, VariableTable variables) {
+            this.text = text;
+            this.variables = variables;
+        }
+
+        String text() {
+            return text;
+        }
+
+        VariableTable variables() {
+            return variables;
+        }
+    }
+
     public static final class Result {
         private final String relativePath;
         private final Path outputPath;
@@ -74,7 +93,7 @@ public final class TemplateFillBatch {
         }
 
         List<Path> files = collectFiles(root, config.templateFillMaxFiles());
-        String contextText = buildContext(featureName, extraVariables, context);
+        Context ctx = buildContext(featureName, extraVariables, context);
 
         List<Result> results = new ArrayList<Result>();
         for (Path file : files) {
@@ -83,14 +102,16 @@ public final class TemplateFillBatch {
             List<String> placeholders = VariableTable.placeholders(template);
 
             VariableTable variables = new VariableTable();
+            variables.putAll(ctx.variables().snapshot());
+            variables.put("templatePath", relative);
+            // 既知の変数はコード側で確定置換し、モデルには残りの空欄だけを渡す。
+            variables.put("templateContent", variables.resolveText(template));
+            variables.put("placeholdersText", formatPlaceholders(placeholders));
+            variables.put("context", ctx.text());
+            variables.put("featureName", StrUtil.trimToEmpty(featureName));
             if (extraVariables != null) {
                 variables.putAll(extraVariables);
             }
-            variables.put("templatePath", relative);
-            variables.put("templateContent", template);
-            variables.put("placeholdersText", formatPlaceholders(placeholders));
-            variables.put("context", contextText);
-            variables.put("featureName", StrUtil.trimToEmpty(featureName));
             String prompt = variables.resolveText(context.repository().prompt(config.templateFillPrompt()));
 
             LlmRequest request = new LlmRequest(config.model(),
@@ -145,16 +166,25 @@ public final class TemplateFillBatch {
         return out.toString();
     }
 
-    private static String buildContext(String featureName, Map<String, String> extraVariables,
-                                       PipelineContext context) throws IOException {
+    private static Context buildContext(String featureName, Map<String, String> extraVariables,
+                                        PipelineContext context) throws IOException {
         StringBuilder out = new StringBuilder();
+        VariableTable variables = new VariableTable();
+        variables.put("featureName", StrUtil.trimToEmpty(featureName));
         if (!StrUtil.isBlank(featureName)) {
-            FeatureSpec spec = context.repository().loadFeature(featureName);
-            VariableTable variables = new VariableTable();
-            variables.putAll(spec.variables());
-            variables.put("featureName", featureName);
-            variables.put("title", spec.title());
+            // front matter の変数も解決済みの状態で参照情報に載せる（title 等を個別に決め打ちしない）。
+            FeatureSpec spec = context.repository().loadFeature(featureName, extraVariables);
+            for (Map.Entry<String, Object> entry : spec.doc().frontMatter().entrySet()) {
+                variables.put(entry.getKey(), entry.getValue());
+            }
             out.append("## 機能描写\n\n").append(variables.resolveText(spec.body())).append("\n\n");
+            if (!spec.unresolvedFrontMatter().isEmpty()) {
+                out.append("## 未解決の変数（推測せず「要確認」として扱うこと）\n\n");
+                for (String placeholder : spec.unresolvedFrontMatter()) {
+                    out.append("- {{").append(placeholder).append("}}\n");
+                }
+                out.append('\n');
+            }
         }
         if (extraVariables != null && !extraVariables.isEmpty()) {
             out.append("## 追加変数\n\n");
@@ -165,6 +195,6 @@ public final class TemplateFillBatch {
         if (out.length() == 0) {
             out.append("（参照情報なし。テンプレートの文脈から妥当な内容を埋めてください。）\n");
         }
-        return out.toString();
+        return new Context(out.toString(), variables);
     }
 }

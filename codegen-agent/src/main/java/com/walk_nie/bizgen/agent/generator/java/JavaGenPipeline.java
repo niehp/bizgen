@@ -2,6 +2,7 @@ package com.walk_nie.bizgen.agent.generator.java;
 
 import com.walk_nie.bizgen.agent.pipeline.Pipeline;
 import com.walk_nie.bizgen.agent.pipeline.PipelineContext;
+import com.walk_nie.bizgen.agent.pipeline.stage.AnalyzeSemanticsStage;
 import com.walk_nie.bizgen.agent.pipeline.stage.ClassifyIntentStage;
 import com.walk_nie.bizgen.agent.pipeline.stage.ExtractTermsStage;
 import com.walk_nie.bizgen.agent.pipeline.stage.GenerateJavaDraftStage;
@@ -20,7 +21,8 @@ import com.walk_nie.bizgen.agent.pipeline.stage.ValidateWriteStage;
  * Java 生成パイプラインの組み立て。ステージ順はここで固定する。
  *
  * 01 load feature / 02 load design / 03 resolve variables / 03b load spec（参考資料）
- * 04 extract terms / 05 match APIs  ← 5 ステップ Pipeline から統合
+ * 04 extract terms / 04b semantic retrieval（モデルが機能を意味解析 → 検索意図 → コードが既存库を決定論検索）
+ * 05 match APIs  ← 5 ステップ Pipeline から統合
  * 06 classify intent / 07 semantic map / 08 search existing code
  * 09 generate draft / 10 polish / 11 validate + 1 回だけ自己修正 / 12 write
  */
@@ -35,6 +37,7 @@ public final class JavaGenPipeline {
                 .add(new ResolveVariablesStage())
                 .add(new LoadSpecStage())
                 .add(new ExtractTermsStage())
+                .add(new AnalyzeSemanticsStage())
                 .add(new MatchApiCatalogStage())
                 .add(new ClassifyIntentStage())
                 .add(new SemanticMapStage())

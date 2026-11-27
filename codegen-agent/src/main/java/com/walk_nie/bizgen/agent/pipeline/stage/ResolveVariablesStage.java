@@ -3,6 +3,7 @@ package com.walk_nie.bizgen.agent.pipeline.stage;
 import com.walk_nie.bizgen.agent.generator.java.JavaGenState;
 import com.walk_nie.bizgen.agent.generator.java.ResolvedDoc;
 import com.walk_nie.bizgen.agent.generator.java.ResolvedFeature;
+import com.walk_nie.bizgen.agent.md.FrontMatterResolver;
 import com.walk_nie.bizgen.agent.md.MdDoc;
 import com.walk_nie.bizgen.agent.pipeline.PipelineContext;
 import com.walk_nie.bizgen.agent.pipeline.Stage;
@@ -31,8 +32,12 @@ public final class ResolveVariablesStage implements Stage<JavaGenState, JavaGenS
 
         VariableTable variables = new VariableTable();
         variables.putAll(state.spec().variables());
+        List<MdDoc> resolvedDesigns = new ArrayList<MdDoc>();
         for (MdDoc doc : state.designs()) {
-            for (Map.Entry<String, Object> entry : doc.frontMatter().entrySet()) {
+            // 設計 md の front matter も機能側の変数を使って定義順に解決する。
+            MdDoc resolved = FrontMatterResolver.resolveDoc(doc, variables.snapshot());
+            resolvedDesigns.add(resolved);
+            for (Map.Entry<String, Object> entry : resolved.frontMatter().entrySet()) {
                 String key = entry.getKey();
                 if ("designs".equalsIgnoreCase(key) || "designrefs".equalsIgnoreCase(key)
                         || "mode".equalsIgnoreCase(key) || "title".equalsIgnoreCase(key)) {
@@ -50,7 +55,7 @@ public final class ResolveVariablesStage implements Stage<JavaGenState, JavaGenS
 
         String featureBody = variables.resolveText(state.spec().body());
         List<ResolvedDoc> resolvedDocs = new ArrayList<ResolvedDoc>();
-        for (MdDoc doc : state.designs()) {
+        for (MdDoc doc : resolvedDesigns) {
             resolvedDocs.add(new ResolvedDoc(doc.level(), doc.name(), variables.resolveText(doc.body())));
         }
 

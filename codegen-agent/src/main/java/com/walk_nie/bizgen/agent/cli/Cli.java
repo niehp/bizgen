@@ -151,6 +151,8 @@ public final class Cli {
             apiList();
         } else if ("spec-list".equals(command)) {
             specList();
+        } else if ("reuse-list".equals(command)) {
+            reuseList();
         } else if ("feature-gen".equals(command)) {
             featureGen(options);
         } else if ("flow-gen".equals(command)) {
@@ -212,6 +214,7 @@ public final class Cli {
         out.println("  terms                                     术语库（日本語 -> 英語）一覧（LLM 不使用）");
         out.println("  api-list                                  API 库の登録済みメソッド一覧（LLM 不使用）");
         out.println("  spec-list                                 spec/api・dict・template・example の資料一覧（LLM 不使用）");
+        out.println("  reuse-list                                再利用テンプレート（spec/block）一覧（LLM 不使用）");
         out.println("  feature-gen --feature <md名>              5 ステップ Pipeline で Java を生成・落盤");
         out.println("  flow-gen --feature <md名>                 6 ステップ: 機能ブロック分解 → API は tool 定位 /");
         out.println("                                            それ以外は新規生成 → ループ → 結合・潤色 → 落盤");
@@ -596,6 +599,14 @@ public final class Cli {
         out.print(catalog.listText());
     }
 
+    private void reuseList() throws IOException {
+        com.walk_nie.bizgen.agent.reuse.ReusableBlockCatalog catalog =
+                com.walk_nie.bizgen.agent.reuse.ReusableBlockCatalog.load(config.blockRoot());
+        out.println("再利用テンプレート: " + config.blockRoot().toAbsolutePath().normalize()
+                + " (enabled=" + config.reuseEnabled() + ", minScore=" + config.reuseMinScore() + ")");
+        out.print(catalog.listText());
+    }
+
     /** 5 ステップ Pipeline を実行し、术语・API・自己修正・出力先を表示する。 */
     private void featureGen(Map<String, String> options) {
         String featureName = options.get("feature");
@@ -641,6 +652,16 @@ public final class Cli {
         if (!result.flow().toolResolvedApis().isEmpty()) {
             out.println("ツールで確認した API: " + result.flow().toolResolvedApis());
         }
+        if (!result.flow().reuseSelections().isEmpty()) {
+            out.println("再利用テンプレート（コード側で確定）: "
+                    + result.flow().reuseSelections().size() + " 件");
+            for (com.walk_nie.bizgen.agent.reuse.ReuseSelection selection
+                    : result.flow().reuseSelections()) {
+                out.println("  - " + selection.blockId() + " [" + selection.kind().name()
+                        + "] score=" + selection.score()
+                        + (selection.apiSignature().isEmpty() ? "" : " → " + selection.apiSignature()));
+            }
+        }
         if (!written.warnings().isEmpty()) {
             out.println("[WARN] 検証警告: " + written.warnings());
         }
@@ -665,6 +686,16 @@ public final class Cli {
         out.println("変更種別: " + result.intent() + "（" + state.intent().source() + "）");
         if (!runner().selectedApis().isEmpty()) {
             out.println("モデルが find_api で確認した API: " + runner().selectedApis());
+        }
+        if (!runner().selectedReuses().isEmpty()) {
+            out.println("再利用テンプレート（apply_block_template で確定）: "
+                    + runner().selectedReuses().size() + " 件");
+            for (com.walk_nie.bizgen.agent.reuse.ReuseSelection selection
+                    : runner().selectedReuses()) {
+                out.println("  - " + selection.blockId() + " [" + selection.kind().name()
+                        + "]" + (selection.apiSignature().isEmpty()
+                        ? "" : " → " + selection.apiSignature()));
+            }
         }
         if (!result.warnings().isEmpty()) {
             out.println("[WARN] 検証警告: " + result.warnings());
@@ -722,6 +753,9 @@ public final class Cli {
         out.println("md      : " + spec.doc().path());
         out.println("title   : " + spec.title());
         out.println("generate: " + generate);
+        if (!spec.unresolvedFrontMatter().isEmpty()) {
+            out.println("[WARN] 未解決の front matter 変数: " + spec.unresolvedFrontMatter());
+        }
         if ("java".equals(generate) || "both".equals(generate)) {
             com.walk_nie.bizgen.agent.md.JavaFeatureOutline outline = spec.javaOutline();
             out.println("----- Java 契約（変数展開済み） -----");
