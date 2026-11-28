@@ -52,4 +52,7 @@ flow-gen --feature md/03-usecase/sample-order-query-service.md
   qwen2.5-coder-14b-instruct 32768
   deepseek-coder-v2-lite-instruct 
   Strata - qwen3.8-flash-next-coder-iq1_m
-  
+
+
+gen --feature md/03-usecase/sample-order-query-service.md
+gen --feature md/03-usecase/sample-order-select-sql.md

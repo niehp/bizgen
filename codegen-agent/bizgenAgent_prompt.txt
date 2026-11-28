@@ -260,3 +260,45 @@ approve_java_edit	审批并写入 Java 文件
  支持MCP
  基于现有工程，做新规开发。
  
+
+------TODO0-----
+表结构md  md/schema/*.md
+System prompt模板 md/prompt/sql-flow.md
+
+User prompt模板 md/prompt/java-generate
+
+------TODO0-----
+定义 base变量，定义在spec/baseVariable.md
+功能描述md 属于spec，spec/usecase 不design md 
+功能描述md 指定 生成文件的保存位置 和 文件名
+
+Java stage
+  LoadFeature
+  LoadDesign
+  ResolveVariables
+  loadSpec
+  ExtractTerms
+  AnalyzeSemantics
+  MatchApiCatalog
+  ClassifyIntent
+  SemanticMap
+  SearchExistingCode
+  GenerateJavaDraft
+  PolishJava
+  ValidateCorrectDraft
+  ValidateWrite
+Java Tool
+  
+Sql stage
+  PrepareSql
+  GenerateSql
+  WriteSql
+Sql tool
+  listTables
+  loadTableSchema
+  LookupVariable
+  TranslateTerms
+  [不要]InjectTerms
+  [不要]LoadSpec
+  [不要]ListDesignDocs
+  [不要]LoadDesignDocs

@@ -2,6 +2,7 @@
 title: 受注と顧客の結合検索
 # generate: java | sql | both。md 一枚で生成対象を決める（要件 4）
 generate: sql
+# sqltype（select / update / delete）
 sqltype: select
 tables: 受注,顧客
 # SQL で扱う対象フィールド（日本語名 / 表.フィールド名）。英語物理名へ変換して prompt に渡す。
